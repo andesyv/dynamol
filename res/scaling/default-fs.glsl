@@ -3,9 +3,15 @@
 in vec3 fragPos;
 in vec2 uv;
 
+uniform int posCount = 0;
 uniform mat4 inverseModelViewProjectionMatrix;
 uniform mat4 inverseModelMatrix;
 uniform mat4 modelViewProjectionMatrix;
+
+layout(std140, binding = 1) buffer VertexBuffer
+{
+    vec4 pos[];
+};
 
 float linearizeDepth(vec3 pos)
 {

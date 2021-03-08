@@ -34,6 +34,7 @@ namespace dynamol
 		// Screen Spaced Vertex Array Object
 		globjects::VertexArray m_ssvao{};
 		globjects::Buffer m_ssvbo{};
+		globjects::Buffer m_atompos{};
 	};
 
 }

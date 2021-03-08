@@ -38,12 +38,19 @@ ScalableRenderer::ScalableRenderer(Viewer *viewer) : Renderer(viewer)
 	binding->setFormat(3, GL_FLOAT, GL_FALSE, 0);
 
 	m_ssvao.enable(0);
+
+	if (!viewer->scene()->protein()->atoms().empty()) {
+		m_atompos.setStorage(viewer->scene()->protein()->atoms(), gl::BufferStorageMask::GL_MAP_READ_BIT);
+		m_atompos.bindBase(GL_SHADER_STORAGE_BUFFER, 1);
+	}
 }
 
 void ScalableRenderer::display()
 {
-	// if (viewer()->scene()->protein()->atoms().size() == 0)
-	// 	return;
+	if (viewer()->scene()->protein()->atoms().size() == 0)
+		return;
+
+	const auto& atoms = viewer()->scene()->protein()->atoms();
 	const auto modelViewProjectionMatrix = viewer()->modelViewProjectionTransform();
 	const auto inverseModelViewProjectionMatrix = inverse(modelViewProjectionMatrix);
 	const auto inverseModelMatrix = inverse(viewer()->modelTransform());
@@ -59,6 +66,7 @@ void ScalableRenderer::display()
 	const auto shader = shaderProgram("default");
 	shader->use();
 
+	shader->setUniform("posCount", static_cast<int>(atoms.size()));
 	shader->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 	shader->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
 	shader->setUniform("inverseModelMatrix", inverseModelMatrix);
