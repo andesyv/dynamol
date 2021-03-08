@@ -4,8 +4,11 @@
 // #include <filesystem>
 // #include <imgui.h>
 #include "Viewer.h"
-// #include "Scene.h"
-// #include "Protein.h"
+#include "Scene.h"
+#include "Protein.h"
+
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/transform.hpp>
 
 using namespace dynamol;
 using namespace gl;
@@ -41,15 +44,24 @@ void ScalableRenderer::display()
 {
 	// if (viewer()->scene()->protein()->atoms().size() == 0)
 	// 	return;
+	const auto modelViewProjectionMatrix = viewer()->modelViewProjectionTransform();
+	const auto inverseModelViewProjectionMatrix = inverse(modelViewProjectionMatrix);
+	const auto inverseModelMatrix = inverse(viewer()->modelTransform());
 
 	// SaveOpenGL state
 	auto currentState = State::currentState();
 
 	glDisable(GL_CULL_FACE);
-	glDisable(GL_DEPTH_TEST);
+	glEnable(GL_DEPTH_TEST);
+	glDepthMask(GL_TRUE);
+	glDepthFunc(GL_LESS);
 
 	const auto shader = shaderProgram("default");
 	shader->use();
+
+	shader->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
+	shader->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
+	shader->setUniform("inverseModelMatrix", inverseModelMatrix);
 	
 	m_ssvao.bind();
 	glDrawArrays(GL_TRIANGLES, 0, 6);

@@ -6,7 +6,7 @@ out vec3 fragPos;
 out vec2 uv;
 
 void main() {
-    uv = (inPos.xy + 1.0) * 0.5;
+    uv = inPos.xy;
     fragPos = inPos;
     gl_Position = vec4(inPos, 1.0);
 }

@@ -105,7 +105,7 @@ int main(int argc, char *argv[])
 	viewer->setModelTransform(modelTransform);
 
 
-	glfwSwapInterval(0);
+	glfwSwapInterval(1);
 
 	// Main loop
 	while (!glfwWindowShouldClose(window))
