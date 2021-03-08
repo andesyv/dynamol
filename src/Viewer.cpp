@@ -16,6 +16,7 @@
 #include "CameraInteractor.h"
 #include "BoundingBoxRenderer.h"
 #include "SphereRenderer.h"
+#include "ScalableRenderer.h"
 #include "Scene.h"
 #include "Protein.h"
 #include <fstream>
@@ -53,7 +54,9 @@ Viewer::Viewer(GLFWwindow *window, Scene *scene) : m_window(window), m_scene(sce
 
 	m_interactors.emplace_back(std::make_unique<CameraInteractor>(this));
 	m_renderers.emplace_back(std::make_unique<SphereRenderer>(this));
+	m_renderers.back()->setEnabled(false);
 	m_renderers.emplace_back(std::make_unique<BoundingBoxRenderer>(this));
+	m_renderers.emplace_back(std::make_unique<ScalableRenderer>(this));
 
 	int i = 1;
 
