@@ -22,6 +22,12 @@ ScalableRenderer::ScalableRenderer(Viewer *viewer) : Renderer(viewer)
 		{ GL_FRAGMENT_SHADER,"./res/scaling/default-fs.glsl" },
 	});
 
+	createShaderProgram("point", {
+		{ GL_VERTEX_SHADER,"./res/scaling/point-vs.glsl" },
+		{ GL_GEOMETRY_SHADER,"./res/scaling/point-gs.glsl" },
+		{ GL_FRAGMENT_SHADER,"./res/scaling/point-fs.glsl" },
+	});
+
 	// Screen spaced example buffer
 	m_ssvbo.setData(std::vector{
 		vec3{-1.f, -1.f, 0.f},
@@ -40,9 +46,45 @@ ScalableRenderer::ScalableRenderer(Viewer *viewer) : Renderer(viewer)
 	m_ssvao.enable(0);
 
 	if (!viewer->scene()->protein()->atoms().empty()) {
-		m_atompos.setStorage(viewer->scene()->protein()->atoms(), gl::BufferStorageMask::GL_MAP_READ_BIT);
-		m_atompos.bindBase(GL_SHADER_STORAGE_BUFFER, 1);
+		m_atompos.setStorage(viewer->scene()->protein()->atoms().back(), gl::BufferStorageMask::GL_MAP_READ_BIT);
+		m_atompos.bindBase(GL_SHADER_STORAGE_BUFFER, 4);
+
+		m_staticpos.setData(viewer->scene()->protein()->atoms().back(), GL_STATIC_DRAW);
+		auto binding = m_atomvao.binding(0);
+		binding->setAttribute(0);
+		binding->setBuffer(&m_staticpos, 0, sizeof(vec4));
+		binding->setFormat(4, GL_FLOAT, GL_FALSE, 0);
+		m_atomvao.enable(0);
 	}
+
+
+	m_framebuffer.bind();
+	m_framebufferPositionTexture.bind();
+	m_framebufferPositionTexture.image2D(0, GL_RGB, screenSize, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+	m_framebufferPositionTexture.setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	m_framebufferPositionTexture.setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	m_framebuffer.attachTexture(GL_COLOR_ATTACHMENT0, &m_framebufferPositionTexture, 0);
+	m_framebufferCountTexture.bind();
+	m_framebufferCountTexture.image2D(0, GL_RGB, screenSize, 0, GL_RGB, GL_UNSIGNED_SHORT, nullptr);
+	m_framebufferCountTexture.setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	m_framebufferCountTexture.setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	m_framebuffer.attachTexture(GL_COLOR_ATTACHMENT1, &m_framebufferCountTexture, 0);
+	m_framebuffer.unbind();
+
+	switch (m_framebuffer.checkStatus()) {
+		case GL_FRAMEBUFFER_UNDEFINED:
+		case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+		case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+		case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
+		case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER :
+		case GL_FRAMEBUFFER_UNSUPPORTED :
+		case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE :
+		case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS :
+			throw std::runtime_error{"Ohno"};
+		case GL_FRAMEBUFFER_COMPLETE:
+			break;
+	}
+	
 }
 
 void ScalableRenderer::display()
@@ -50,26 +92,51 @@ void ScalableRenderer::display()
 	if (viewer()->scene()->protein()->atoms().size() == 0)
 		return;
 
-	const auto& atoms = viewer()->scene()->protein()->atoms();
+	const auto& atom = viewer()->scene()->protein()->atoms().back();
 	const auto modelViewProjectionMatrix = viewer()->modelViewProjectionTransform();
 	const auto inverseModelViewProjectionMatrix = inverse(modelViewProjectionMatrix);
 	const auto inverseModelMatrix = inverse(viewer()->modelTransform());
 
+	const auto pointShader = shaderProgram("point");
+	const auto shader = shaderProgram("default");
+
 	// SaveOpenGL state
 	auto currentState = State::currentState();
+	const auto framebufferSize = viewer()->viewportSize();
+	
 
+	/// Forward position discretization step
+	m_framebuffer.bind();
+	glViewport(0, 0, screenSize.x, screenSize.y);
+	glClear(GL_COLOR_BUFFER_BIT);
+	pointShader->use();
+	pointShader->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
+
+	glDisable(GL_CULL_FACE);
+	glDisable(GL_DEPTH_TEST);
+
+	m_atomvao.bind();
+	glDrawArrays(GL_POINTS, 0, static_cast<int>(atom.size()));
+	m_atomvao.unbind();
+
+	m_framebuffer.unbind();
+	glViewport(0, 0, framebufferSize.x, framebufferSize.y);
+
+
+
+	// Raymarch render:
 	glDisable(GL_CULL_FACE);
 	glEnable(GL_DEPTH_TEST);
 	glDepthMask(GL_TRUE);
 	glDepthFunc(GL_LESS);
 
-	const auto shader = shaderProgram("default");
 	shader->use();
 
-	shader->setUniform("posCount", static_cast<int>(atoms.size()));
+	shader->setUniform("posCount", static_cast<int>(atom.size()));
 	shader->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 	shader->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
 	shader->setUniform("inverseModelMatrix", inverseModelMatrix);
+	m_framebufferPositionTexture.bindActive(0);
 	
 	m_ssvao.bind();
 	glDrawArrays(GL_TRIANGLES, 0, 6);

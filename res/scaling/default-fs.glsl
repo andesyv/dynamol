@@ -8,7 +8,10 @@ uniform mat4 inverseModelViewProjectionMatrix;
 uniform mat4 inverseModelMatrix;
 uniform mat4 modelViewProjectionMatrix;
 
-layout(std140, binding = 1) buffer VertexBuffer
+layout(binding = 0) uniform sampler2D posBuffer;
+layout(binding = 1) uniform usampler2D countBuffer;
+
+layout(std140, binding = 4) buffer VertexBuffer
 {
     vec4 pos[];
 };
@@ -23,12 +26,12 @@ float linearizeDepth(vec3 pos)
 }
 
 float sdf(vec3 p) {
-    // vec4 v = inverseModelViewProjectionMatrix * vec4(vec3(0.), 1.);
-    // v /= v.w;
-    vec4 v = inverseModelMatrix * vec4(vec3(0.), 1.);
-    v /= v.w;
+    float d = 1000.0;
+    for (int i = 0; i < 10 && i < posCount; ++i) {
+        d = min(d, length(p - pos[i].xyz) - 1.0);
+    }
     
-    return length(p - v.xyz) - 70.0;
+    return d;
 }
 
 out vec4 fragColor;
@@ -45,19 +48,22 @@ void main() {
     float sceneDepth = length((far - near).xyz);
     vec3 rd = (far - near).xyz / sceneDepth;
 
-    // Basic sphere tracing:
-    float d = 0.;
-    for (int i = 0; i < 100; ++i) {
-        vec3 p = ro + d * rd;
-        float dist = sdf(p);
-        if (dist < 0.1) {
-            fragColor = vec4(1., 0., 0., 1.);
-            gl_FragDepth = linearizeDepth(p);
-            return;
-        }
+    // // Basic sphere tracing:
+    // float d = 0.;
+    // for (int i = 0; i < 100; ++i) {
+    //     vec3 p = ro + d * rd;
+    //     float dist = sdf(p);
+    //     if (dist < 0.1) {
+    //         float depth = linearizeDepth(p);
+    //         fragColor = vec4(vec3(depth), 1.);
+    //         gl_FragDepth = depth;
+    //         return;
+    //     }
 
-        d += dist;
-    }
+    //     d += dist;
+    // }
 
-    discard;
+    // discard;
+    vec2 texCoord = uv * 0.5 + 0.5;
+    fragColor = vec4(texture(posBuffer, texCoord).rgb, 1.0);
 }

@@ -35,6 +35,14 @@ namespace dynamol
 		globjects::VertexArray m_ssvao{};
 		globjects::Buffer m_ssvbo{};
 		globjects::Buffer m_atompos{};
+
+		globjects::Texture m_framebufferPositionTexture{};
+		globjects::Texture m_framebufferCountTexture{};
+		globjects::Framebuffer m_framebuffer{};
+		globjects::Buffer m_staticpos{};
+		globjects::VertexArray m_atomvao{};
+
+		glm::ivec2 screenSize{64, 64};
 	};
 
 }
