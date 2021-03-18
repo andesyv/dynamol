@@ -131,10 +131,16 @@ void ScalableRenderer::display()
 	// m_framebuffer.unbind();
 	// glViewport(0, 0, framebufferSize.x, framebufferSize.y);
 
-	// Clear SSBO
-	const auto gSize = gridSize * gridSize * gridSize;
-	m_atompos.clearSubData(GL_RGBA32UI, 0, sizeof(glm::vec4) * gSize, GL_RGBA, GL_FLOAT, nullptr);
-	m_atompos.clearSubData(GL_R8UI, sizeof(glm::vec4) * gSize, sizeof(glm::uint) * gSize, GL_RED, GL_UNSIGNED_INT, nullptr);
+	// Possibly resize grid:
+	if (viewer()->gridSize != gridSize) {
+		resizeSSBO(viewer()->gridSize);
+	} else {
+		// Clear SSBO
+		const auto gSize = gridSize * gridSize * gridSize;
+		m_atompos.clearSubData(GL_RGBA32UI, 0, sizeof(glm::vec4) * gSize, GL_RGBA, GL_FLOAT, nullptr);
+		m_atompos.clearSubData(GL_R8UI, sizeof(glm::vec4) * gSize, sizeof(glm::uint) * gSize, GL_RED, GL_UNSIGNED_INT, nullptr);
+	}
+
 
 
 	gridShader->use();

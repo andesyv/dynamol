@@ -71,9 +71,7 @@ void main() {
 
         d += dist;
     }
-
     
     discard;
-    
-    // fragColor = vec4(vec3(float(count[0]) / 100000000.0), 1.0);
+    // fragColor = vec4(abs(vec3(cells[0].pos.xyz) / (float(cells[0].count) * 1000.0)), 1.0);
 }

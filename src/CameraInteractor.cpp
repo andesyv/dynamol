@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <algorithm>
+#include <cmath>
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -65,10 +66,12 @@ void CameraInteractor::keyEvent(int key, int scancode, int action, int mods)
 		m_xPrevious = m_xCurrent;
 		m_yPrevious = m_yCurrent;
 		cursorPosEvent(m_xCurrent, m_yCurrent);
+		m_shift = true;
 	}
 	else if (key == GLFW_KEY_LEFT_SHIFT && action == GLFW_RELEASE)
 	{
 		m_light = false;
+		m_shift = false;
 	}
 	else if (key == GLFW_KEY_HOME && action == GLFW_RELEASE)
 	{
@@ -130,9 +133,14 @@ void CameraInteractor::mouseButtonEvent(int button, int action, int mods)
 	}
 	else if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
 	{
-		m_scaling = true;
-		m_xPrevious = m_xCurrent;
-		m_yPrevious = m_yCurrent;
+		if (m_shift) {
+			m_gridscale = true;
+			m_gridscalepos = m_xCurrent;
+		} else {
+			m_scaling = true;
+			m_xPrevious = m_xCurrent;
+			m_yPrevious = m_yCurrent;
+		}
 	}
 	else if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS)
 	{
@@ -145,6 +153,7 @@ void CameraInteractor::mouseButtonEvent(int button, int action, int mods)
 		m_rotating = false;
 		m_scaling = false;
 		m_panning = false;
+		m_gridscale = false;
 	}
 }
 
@@ -152,6 +161,18 @@ void CameraInteractor::cursorPosEvent(double xpos, double ypos)
 {
 	m_xCurrent = xpos;
 	m_yCurrent = ypos;
+
+	if (m_gridscale) {
+		double di;
+		const auto f = std::modf((xpos - m_gridscalepos) * 0.01, &di);
+		const auto i = static_cast<int>(di);
+
+		if (i) {
+			viewer()->gridSize = std::max(i, 1);
+			std::cout << i << std::endl;
+			m_gridscalepos = f;
+		}
+	}
 
 	if (m_light)
 	{

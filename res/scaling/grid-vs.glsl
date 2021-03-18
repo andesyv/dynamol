@@ -42,5 +42,5 @@ void main() {
     atomicAdd(cells[index].pos.z, upos.z);
 
     // Increment count
-    atomicAdd(cells[0].count, 1);
+    atomicAdd(cells[index].count, 1);
 }

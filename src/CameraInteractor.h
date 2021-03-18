@@ -35,10 +35,14 @@ namespace dynamol
 		bool m_rotating = false;
 		bool m_scaling = false;
 		bool m_panning = false;
+		bool m_shift = false;
+		bool m_gridscale = false;
 		bool m_benchmark = false;
 		double m_startTime = 0.0;
 		glm::uint m_frameCount = 0;
 		double m_xPrevious = 0.0, m_yPrevious = 0.0;
 		double m_xCurrent = 0.0, m_yCurrent = 0.0;
+		double m_gridscalepos = 0.0;
+
 	};
 }
