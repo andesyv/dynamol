@@ -332,7 +332,7 @@ void CameraInteractor::display()
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 		glColor4f(1.0f, 1.0f, 1.0f, 0.5f);
-		glPointSize(17.0);
+		// glPointSize(17.0);
 		glBegin(GL_POINTS);
 		glVertex3f(worldLightPosition.x, worldLightPosition.y, worldLightPosition.z);
 		glEnd();

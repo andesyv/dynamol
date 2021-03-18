@@ -46,7 +46,7 @@ namespace dynamol
 
 		void saveImage(const std::string & filename);
 
-		glm::uint gridSize{1};
+		glm::uint gridSize{4};
 
 	private:
 

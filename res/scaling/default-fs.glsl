@@ -33,12 +33,13 @@ float linearizeDepth(vec3 pos)
 
 float sdf(vec3 p) {
     float d = 1000.0;
-    for (int i = 0; i < gridScale; ++i) {
+    for (int i = 0; i < gridScale * gridScale * gridScale; ++i) {
         if (cells[i].count == 0)
             continue;
 
-        vec3 fpos = vec3(cells[i].pos.xyz) * 0.001; // Convert to floating points (divide by 1000)
-        vec3 avgpos = fpos / float(cells[i].count);
+        vec3 fpos = vec3(cells[i].pos.xyz); // Convert to floating points (divide by 1000)
+        // avgpos is in model coords
+        vec3 avgpos = fpos / (float(cells[i].count) * 1000.0);
         d = min(d, length(p - avgpos) - 10.0);
     }
     
@@ -73,5 +74,4 @@ void main() {
     }
     
     discard;
-    // fragColor = vec4(abs(vec3(cells[0].pos.xyz) / (float(cells[0].count) * 1000.0)), 1.0);
 }

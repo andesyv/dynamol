@@ -137,8 +137,8 @@ void ScalableRenderer::display()
 	} else {
 		// Clear SSBO
 		const auto gSize = gridSize * gridSize * gridSize;
-		m_atompos.clearSubData(GL_RGBA32UI, 0, sizeof(glm::vec4) * gSize, GL_RGBA, GL_FLOAT, nullptr);
-		m_atompos.clearSubData(GL_R8UI, sizeof(glm::vec4) * gSize, sizeof(glm::uint) * gSize, GL_RED, GL_UNSIGNED_INT, nullptr);
+		m_atompos.clearSubData(GL_RGBA32UI, 0, sizeof(glm::uvec4) * gSize, GL_RGBA, GL_UNSIGNED_INT, nullptr);
+		m_atompos.clearSubData(GL_RGBA32UI, sizeof(glm::uvec4) * gSize, sizeof(glm::uvec4) * gSize, GL_RGBA, GL_UNSIGNED_INT, nullptr);
 	}
 
 
@@ -181,7 +181,7 @@ void ScalableRenderer::display()
 
 void ScalableRenderer::resizeSSBO(glm::uint size) {
 	m_atompos.setData(
-		(sizeof(glm::uvec4) + sizeof(glm::uint)) * size * size * size,
+		(sizeof(glm::uvec4) + sizeof(glm::uvec4)) * size * size * size,
 		nullptr, gl::GL_DYNAMIC_COPY);
 	gridSize = size;
 	// m_atompos.bindBase(GL_SHADER_STORAGE_BUFFER, 4);
