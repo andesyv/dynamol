@@ -30,6 +30,8 @@ namespace dynamol
 		ScalableRenderer(Viewer *viewer);
 		virtual void display();
 
+		void resizeSSBO(glm::uint size);
+
 	private:
 		// Screen Spaced Vertex Array Object
 		globjects::VertexArray m_ssvao{};
@@ -43,6 +45,8 @@ namespace dynamol
 		globjects::VertexArray m_atomvao{};
 
 		glm::ivec2 screenSize{64, 64};
+
+		glm::uint gridSize{1};
 	};
 
 }

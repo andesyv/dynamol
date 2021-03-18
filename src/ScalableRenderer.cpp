@@ -28,6 +28,11 @@ ScalableRenderer::ScalableRenderer(Viewer *viewer) : Renderer(viewer)
 		{ GL_FRAGMENT_SHADER,"./res/scaling/point-fs.glsl" },
 	});
 
+	createShaderProgram("grid", {
+		{ GL_VERTEX_SHADER,"./res/scaling/grid-vs.glsl" },
+		{ GL_FRAGMENT_SHADER,"./res/scaling/grid-fs.glsl" },
+	});
+
 	// Screen spaced example buffer
 	m_ssvbo.setData(std::vector{
 		vec3{-1.f, -1.f, 0.f},
@@ -46,7 +51,7 @@ ScalableRenderer::ScalableRenderer(Viewer *viewer) : Renderer(viewer)
 	m_ssvao.enable(0);
 
 	if (!viewer->scene()->protein()->atoms().empty()) {
-		m_atompos.setStorage(viewer->scene()->protein()->atoms().back(), gl::BufferStorageMask::GL_MAP_READ_BIT);
+		// m_atompos.setStorage(viewer->scene()->protein()->atoms().back(), gl::BufferStorageMask::GL_MAP_READ_BIT);
 		m_atompos.bindBase(GL_SHADER_STORAGE_BUFFER, 4);
 
 		m_staticpos.setData(viewer->scene()->protein()->atoms().back(), GL_STATIC_DRAW);
@@ -85,6 +90,8 @@ ScalableRenderer::ScalableRenderer(Viewer *viewer) : Renderer(viewer)
 			break;
 	}
 	
+
+	resizeSSBO(2);
 }
 
 void ScalableRenderer::display()
@@ -96,32 +103,50 @@ void ScalableRenderer::display()
 	const auto modelViewProjectionMatrix = viewer()->modelViewProjectionTransform();
 	const auto inverseModelViewProjectionMatrix = inverse(modelViewProjectionMatrix);
 	const auto inverseModelMatrix = inverse(viewer()->modelTransform());
+	const std::pair bounds{viewer()->scene()->protein()->minimumBounds(), viewer()->scene()->protein()->maximumBounds()};
 
-	const auto pointShader = shaderProgram("point");
+	// const auto pointShader = shaderProgram("point");
 	const auto shader = shaderProgram("default");
+	const auto gridShader = shaderProgram("grid");
 
 	// SaveOpenGL state
 	auto currentState = State::currentState();
-	const auto framebufferSize = viewer()->viewportSize();
+	// const auto framebufferSize = viewer()->viewportSize();
 	
 
-	/// Forward position discretization step
-	m_framebuffer.bind();
-	glViewport(0, 0, screenSize.x, screenSize.y);
-	glClear(GL_COLOR_BUFFER_BIT);
-	pointShader->use();
-	pointShader->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
+	// /// Forward position discretization step
+	// m_framebuffer.bind();
+	// glViewport(0, 0, screenSize.x, screenSize.y);
+	// glClear(GL_COLOR_BUFFER_BIT);
+	// pointShader->use();
+	// pointShader->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 
-	glDisable(GL_CULL_FACE);
-	glDisable(GL_DEPTH_TEST);
+	// glDisable(GL_CULL_FACE);
+	// glDisable(GL_DEPTH_TEST);
+
+	// m_atomvao.bind();
+	// glDrawArrays(GL_POINTS, 0, static_cast<int>(atom.size()));
+	// m_atomvao.unbind();
+
+	// m_framebuffer.unbind();
+	// glViewport(0, 0, framebufferSize.x, framebufferSize.y);
+
+	// Clear SSBO
+	const auto gSize = gridSize * gridSize * gridSize;
+	m_atompos.clearSubData(GL_RGBA32UI, 0, sizeof(glm::vec4) * gSize, GL_RGBA, GL_FLOAT, nullptr);
+	m_atompos.clearSubData(GL_R8UI, sizeof(glm::vec4) * gSize, sizeof(glm::uint) * gSize, GL_RED, GL_UNSIGNED_INT, nullptr);
+
+
+	gridShader->use();
+	gridShader->setUniform("gridScale", gridSize);
+	gridShader->setUniform("minb", bounds.first);
+	gridShader->setUniform("maxb", bounds.second);
+	gridShader->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
+	gridShader->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
 
 	m_atomvao.bind();
-	glDrawArrays(GL_POINTS, 0, static_cast<int>(atom.size()));
+	glDrawArrays(GL_POINTS, 0, static_cast<GLsizei>(atom.size()));
 	m_atomvao.unbind();
-
-	m_framebuffer.unbind();
-	glViewport(0, 0, framebufferSize.x, framebufferSize.y);
-
 
 
 	// Raymarch render:
@@ -136,7 +161,8 @@ void ScalableRenderer::display()
 	shader->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 	shader->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
 	shader->setUniform("inverseModelMatrix", inverseModelMatrix);
-	m_framebufferPositionTexture.bindActive(0);
+	shader->setUniform("gridScale", gridSize);
+	// m_framebufferPositionTexture.bindActive(0);
 	
 	m_ssvao.bind();
 	glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -145,4 +171,12 @@ void ScalableRenderer::display()
 	shader->release();
 	// Restore OpenGL state
 	currentState->apply();
+}
+
+void ScalableRenderer::resizeSSBO(glm::uint size) {
+	m_atompos.setData(
+		(sizeof(glm::uvec4) + sizeof(glm::uint)) * size * size * size,
+		nullptr, gl::GL_DYNAMIC_COPY);
+	gridSize = size;
+	// m_atompos.bindBase(GL_SHADER_STORAGE_BUFFER, 4);
 }
