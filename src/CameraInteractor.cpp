@@ -343,7 +343,7 @@ void CameraInteractor::display()
 
 void CameraInteractor::resetProjectionTransform()
 {
-	vec2 viewportSize = viewer()->viewportSize();
+	auto viewportSize = static_cast<glm::ivec2>(viewer()->viewportSize());
 	framebufferSizeEvent(viewportSize.x, viewportSize.y);
 }
 

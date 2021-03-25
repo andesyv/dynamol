@@ -23,6 +23,16 @@ using namespace gl;
 using namespace glm;
 using namespace globjects;
 
+// https://stackoverflow.com/questions/1505675/power-of-an-integer-in-c
+int pow(int a, unsigned int p) {
+	if (p == 0) return 1;
+	if (p == 1) return a;
+
+	int tmp = pow(a, p/2);
+	if (p%2 == 0) return tmp * tmp;
+	else return a * tmp * tmp;
+}
+
 std::unique_ptr<Texture> loadTexture(const std::string& filename)
 {
 	int width, height, channels;
@@ -167,6 +177,11 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer)
 			{ GL_FRAGMENT_SHADER,"./res/sphere/shadow-fs.glsl" },
 		},
 		{ "./res/model/globals.glsl" });
+
+	createShaderProgram("grid", {
+			{ GL_VERTEX_SHADER,"./res/scaling/grid-vs.glsl" },
+			{ GL_FRAGMENT_SHADER,"./res/scaling/grid-fs.glsl" },
+		});
 
 	m_framebufferSize = viewer->viewportSize();
 
@@ -346,6 +361,26 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer)
 	m_shadowFramebuffer->attachTexture(GL_DEPTH_ATTACHMENT, m_shadowDepthTexture.get());
 	m_shadowFramebuffer->setDrawBuffers({ GL_COLOR_ATTACHMENT0 });
 	
+	// Set scene graph buffer:
+	m_sceneGraphBuffer = Buffer::create();
+	// Use sum of geometric series (a = 8, k = 8) to calculate grid size.
+	const unsigned long long gridCount = (pow(8, gridDepth + 1) - 8) / 7;
+	std::cout << "Buffer size: " << gridCount * (sizeof(glm::uvec4) + sizeof(glm::uvec4)) << std::endl;
+	m_sceneGraphBuffer->setData(
+		(sizeof(glm::uvec4) + sizeof(glm::uvec4)) * gridCount,
+		nullptr, gl::GL_DYNAMIC_COPY);
+	m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
+
+	// Vertex binding setup
+	m_denseAtomVertices = Buffer::create();
+	m_denseAtomVertices->setStorage(viewer->scene()->protein()->m_genAtomsDense, gl::GL_NONE_BIT);
+	m_denseVertexCount = static_cast<gl::GLsizei>(viewer->scene()->protein()->m_genAtomsDense.size());
+	
+	auto vertexBinding = m_gridVAO->binding(0);
+	vertexBinding->setAttribute(0);
+	vertexBinding->setBuffer(m_denseAtomVertices.get(), 0, sizeof(glm::vec4));
+	vertexBinding->setFormat(4, GL_FLOAT);
+	m_gridVAO->enable(0);
 }
 
 void SphereRenderer::display()
@@ -389,6 +424,7 @@ void SphereRenderer::display()
 	auto programDOFBlend = shaderProgram("dofblend");
 	auto programDisplay = shaderProgram("display");
 	auto programShadow = shaderProgram("shadow");
+	auto programGrid = shaderProgram("grid");
 
 	
 	// get cursor position for magic lens
@@ -510,7 +546,7 @@ void SphereRenderer::display()
 							environmentTextureIndex = i;
 
 						ImGui::SameLine();
-						ImGui::Image((ImTextureID)texture->id(), ImVec2(32.0f, 32.0f));
+						ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<std::size_t>(texture->id())), ImVec2(32.0f, 32.0f));
 						ImGui::PopID();
 						ImGui::EndGroup();
 					}
@@ -612,7 +648,7 @@ void SphereRenderer::display()
 	// Properties for animation
 	const uint timestepCount = (uint)viewer()->scene()->protein()->atoms().size();
 	const float animationTime = animate ? float(glfwGetTime()) : -1.0f;
-	const float currentTime = glfwGetTime() * animationFrequency;
+	const float currentTime = static_cast<float>(glfwGetTime()) * animationFrequency;
 	const uint currentTimestep = uint(currentTime) % timestepCount;
 	const uint nextTimestep = (currentTimestep + 1) % timestepCount;
 	const float animationDelta = currentTime - floor(currentTime);
@@ -670,6 +706,33 @@ void SphereRenderer::display()
 		nextVertexBinding->setFormat(4, GL_FLOAT);
 		m_vao->enable(1);
 	}
+
+	//////////////////////////////////////////////////////////////////////////
+	// Grid calculation pass
+	//////////////////////////////////////////////////////////////////////////
+
+	// Clear SSBO
+	// Use sum of geometric series (a = 8, k = 8) to calculate grid size.
+	const unsigned long long gridCount = (pow(8, gridDepth + 1) - 8) / 7;
+	// std::vector<std::pair<glm::uvec4, glm::uvec4>> emptyBuffer{};
+	// emptyBuffer.resize(gridCount, {});
+	m_sceneGraphBuffer->clearSubData(GL_RGBA32UI, 0, (sizeof(glm::uvec4) + sizeof(glm::uvec4)) * gridCount, GL_RGBA, GL_UNSIGNED_INT, nullptr);
+
+	const std::pair bounds{viewer()->scene()->protein()->minimumBounds(), viewer()->scene()->protein()->maximumBounds()};
+
+	programGrid->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
+	programGrid->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
+	programGrid->setUniform("gridScale", gridSize);
+	programGrid->setUniform("gridDepth", gridDepth);
+	programGrid->setUniform("minb", bounds.first);
+	programGrid->setUniform("maxb", bounds.second);
+
+	m_gridVAO->bind();
+	programGrid->use();
+	glDrawArrays(GL_POINTS, 0, m_denseVertexCount);
+	programGrid->release();
+	m_gridVAO->unbind();
+	
 
 	//////////////////////////////////////////////////////////////////////////
 	// Shadow rendering pass
@@ -1123,4 +1186,4 @@ void SphereRenderer::display()
 
 	// Restore OpenGL state
 	currentState->apply();
-}
+}	

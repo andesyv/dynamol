@@ -51,6 +51,8 @@ namespace dynamol
 		static const std::unordered_map<std::string, glm::uint> & chainIds();
 		static const std::array<glm::vec3, 64> & chainColors();
 
+		std::vector<glm::vec4> m_genAtomsDense;
+
 	private:
 
 		std::string m_filename;

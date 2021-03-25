@@ -15,11 +15,16 @@
 #include <globjects/globjects.h>
 #include <globjects/logging.h>
 
+#include <random>
+#include <ctime>
+
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/string_cast.hpp>
 
 using namespace dynamol;
 using namespace glm;
+
+static std::default_random_engine ran{static_cast<unsigned int>(std::time(nullptr))};
 
 // trim from start (in place)
 static inline void ltrim(std::string &s)
@@ -219,6 +224,19 @@ void Protein::load(const std::string& filename)
 	}
 
 	globjects::debug() << uint(m_atoms.size()) << " timesteps loaded." << std::endl;
+
+	// Generate LOD (for testing):
+	const auto& atom = m_atoms.back();
+	m_genAtomsDense.reserve(atom.size() * 10);
+	const auto offset = 0.1;
+	for (const auto& particle : atom) {
+		// Generate some particles with random offsets to the parent:
+		for (uint i{0}; i < 10; ++i) {
+			const auto r = [offset](){ return ((ran() % 1000 * 0.001f) - 0.5) * offset; };
+			auto p = particle + glm::vec4{r(), r(), r(), 0.f};
+			m_genAtomsDense.push_back(p);
+		}
+	}
 }
 
 const std::string & Protein::filename() const

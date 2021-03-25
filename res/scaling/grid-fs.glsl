@@ -2,6 +2,7 @@
 
 flat in ivec3 gridIndex;
 flat in vec3 vPos;
+flat in uint index;
 
 uniform uint gridScale = 1;
 
