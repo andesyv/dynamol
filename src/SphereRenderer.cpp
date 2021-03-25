@@ -501,7 +501,7 @@ void SphereRenderer::display()
 	static uint materialTextureIndex = 0;
 	static uint bumpTextureIndex = 0;
 
-	static float var1 = 0, var2 = 0, var3 = 0;
+	static float var1{0.01f}, var2{100.f}, var3{0.f};
 
 	// user interface for manipulating rendering parameters
 	if (ImGui::BeginMenu("Renderer"))
@@ -645,7 +645,7 @@ void SphereRenderer::display()
 
 	if (ImGui::BeginMenu("Other Shit")) {
 		ImGui::SliderFloat("Var1", &var1, 0.f, 0.1f);
-		ImGui::SliderFloat("Var2", &var2, 0.f, 0.1f);
+		ImGui::SliderFloat("Var2", &var2, 0.f, 100.f);
 		ImGui::SliderFloat("Var3", &var3, 0.f, 0.1f);
 		ImGui::EndMenu();
 	}

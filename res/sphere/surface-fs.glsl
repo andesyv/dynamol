@@ -326,13 +326,13 @@ void main()
 					/// Adjust surface based on higher LOD
 					uint LOD = 6;
 					// 1. Navigate to correct cell:
-					uint index = 0;
+					uint offsetIndex = 0;
 					const uint gridScale3 = gridScale * gridScale * gridScale;
 					uint gridStep = 1;
 					for (uint j = 0; j < LOD; ++j)
 						gridStep *= gridScale;
 					for (uint d = 1; d < LOD; ++d) {
-						index += d * d * d * gridScale3;
+						offsetIndex += d * d * d * gridScale3;
 					}
 
 					vec3 bdir = (maxb - minb + 2.0 * BIAS).xyz / float(gridStep);
@@ -340,19 +340,38 @@ void main()
 					// Calculate index:
 					vec3 dir = currentPosition.xyz - minb - BIAS;
 					ivec3 gridIndex = ivec3(floor(dir / bdir));
-					index += gridIndex.x + gridIndex.y * gridStep + gridIndex.z * gridStep * gridStep;
-					// if (584 < index)
-					// 	discard;
+					float dist = 1000000.0;
 
-					// 2. Find distance to average cell position:
-					/// (divide by 1000 because position is multiplied by 1000 for precision preservation)
-					vec3 cellPos = vec3(cells[index].pos.xyz) / float(cells[index].count * 1000);
+					// Voronoi sampling (sampling neighbouring cells as well for a total of 9 cells)
+					for (int z = -1; z < 2; ++z) {
+						for (int y = -1; y < 2; ++y) {
+							for (int x = -1; x < 2; ++x) {
+								ivec3 offsetGridIndex = ivec3(gridIndex.x + x, gridIndex.y + y, gridIndex.z + z);
+								// Bounds checking:
+								if (offsetGridIndex.x < 0 ||
+									offsetGridIndex.y < 0 ||
+									offsetGridIndex.z < 0 ||
+									gridStep < offsetGridIndex.x ||
+									gridStep < offsetGridIndex.y ||
+									gridStep < offsetGridIndex.z)
+									continue;
 
-					float adjustedDistance = max(length(cellPos - currentPosition.xyz) - 100.0, 0.);
+								uint index = offsetIndex + offsetGridIndex.x + offsetGridIndex.y * gridStep + offsetGridIndex.z * gridStep * gridStep;
+
+								// 2. Find distance to average cell position:
+								/// (divide by 1000 because position is multiplied by 1000 for precision preservation)
+								vec3 cellPos = vec3(cells[index].pos.xyz) / float(cells[index].count * 1000);
+								float adjustedDistance = max(length(cellPos - currentPosition.xyz) - var2, 0.);
+								dist = min(adjustedDistance, dist);
+							}
+						}
+					}
+
 					// diffuseColor = vec3(adjustedDistance / 100.0);
 
 					// 3. Adjust distance based on new surface field:
-					surfaceDistance += adjustedDistance * var1;
+					if (dist < 1000.0)
+						surfaceDistance += dist * var1;
 
 
 					if (surfaceDistance < eps)
