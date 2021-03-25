@@ -81,7 +81,7 @@ namespace dynamol
 		std::unique_ptr<globjects::VertexArray> m_gridVAO = std::make_unique<globjects::VertexArray>();
 		gl::GLsizei m_denseVertexCount{0};
 		const glm::uint gridSize = 2;
-		const glm::uint gridDepth = 8;
+		const glm::uint gridDepth = 9;
 	};
 
 }

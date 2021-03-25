@@ -49,17 +49,20 @@ void main() {
         // Calculate index:
         vec3 dir = p.xyz - minb - BIAS;
         gridIndex = ivec3(dir / bdir);
-        index = offsetIndex + gridIndex.x + gridIndex.y * gridStep + gridIndex.z * gridStep * gridStep;
+        float dirdot = dot(dir, (maxb - minb + 2.0 * BIAS).xyz);
+        if (/*dirdot <= 1.0 &&*/ 0.0 <= dirdot) {
+            index = offsetIndex + gridIndex.x + gridIndex.y * gridStep + gridIndex.z * gridStep * gridStep;
 
-        // Increment count
-        atomicAdd(cells[index].count, 1);
+            // Increment count
+            atomicAdd(cells[index].count, 1);
 
-        // Add position
-        uvec3 upos = uvec3(floor(p * 1000.0)); // Multiply by 1000 and discretize to int
-        // Atomic add position:
-        atomicAdd(cells[index].pos.x, upos.x);
-        atomicAdd(cells[index].pos.y, upos.y);
-        atomicAdd(cells[index].pos.z, upos.z);
+            // Add position
+            uvec3 upos = uvec3(floor(p * 1000.0)); // Multiply by 1000 and discretize to int
+            // Atomic add position:
+            atomicAdd(cells[index].pos.x, upos.x);
+            atomicAdd(cells[index].pos.y, upos.y);
+            atomicAdd(cells[index].pos.z, upos.z);
+        }
 
         // Add previous cells: 8 -> 64 -> 512
         offsetIndex += gridStep * gridStep * gridStep;

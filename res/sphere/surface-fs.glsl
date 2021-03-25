@@ -357,20 +357,29 @@ void main()
 									continue;
 
 								uint index = offsetIndex + offsetGridIndex.x + offsetGridIndex.y * gridStep + offsetGridIndex.z * gridStep * gridStep;
-
+								if (cells[index].count == 0)
+									continue;
+									
 								// 2. Find distance to average cell position:
 								/// (divide by 1000 because position is multiplied by 1000 for precision preservation)
 								vec3 cellPos = vec3(cells[index].pos.xyz) / float(cells[index].count * 1000);
-								float adjustedDistance = max(length(cellPos - currentPosition.xyz) - var2, 0.);
-								dist = min(adjustedDistance, dist);
+								float adjustedDistance = length(cellPos - currentPosition.xyz) - var2;
+								if (abs(adjustedDistance) < abs(dist))
+									dist = adjustedDistance;
 							}
 						}
 					}
 
-					// diffuseColor = vec3(adjustedDistance / 100.0);
+					// uint index = offsetIndex + gridIndex.x + gridIndex.y * gridStep + gridIndex.z * gridStep * gridStep;
+					// // if (cells[index].count == 0)
+					// // 	discard;
+					// vec3 cellPos = vec3(cells[index].pos.xyz) / float(cells[index].count * 1000);
+					// dist = max(length(cellPos - currentPosition.xyz) - var2, 0.);
+					
+					// diffuseColor = vec3(dist / 100.0);
 
 					// 3. Adjust distance based on new surface field:
-					if (dist < 1000.0)
+					if (abs(dist) < 1000.0)
 						surfaceDistance += dist * var1;
 
 
@@ -389,6 +398,7 @@ void main()
 						break;
 					}
 
+					// Note: Commenting out this makes a very cool effect. :o
 					if (surfaceDistance < minimumDistance)
 					{
 						minimumDistance = surfaceDistance;

@@ -228,7 +228,7 @@ void Protein::load(const std::string& filename)
 	// Generate LOD (for testing):
 	const auto& atom = m_atoms.back();
 	m_genAtomsDense.reserve(atom.size() * 10);
-	const auto offset = 80.0;
+	const auto offset = 20.0;
 	for (const auto& particle : atom) {
 		// Generate some particles with random offsets to the parent:
 		for (uint i{0}; i < 10; ++i) {
