@@ -501,6 +501,8 @@ void SphereRenderer::display()
 	static uint materialTextureIndex = 0;
 	static uint bumpTextureIndex = 0;
 
+	static float var1 = 0, var2 = 0, var3 = 0;
+
 	// user interface for manipulating rendering parameters
 	if (ImGui::BeginMenu("Renderer"))
 	{
@@ -638,6 +640,13 @@ void SphereRenderer::display()
 			ImGui::SliderFloat("Amplitude", &animationAmplitude, 1.0f, 32.0f);
 		}
 
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu("Other Shit")) {
+		ImGui::SliderFloat("Var1", &var1, 0.f, 0.1f);
+		ImGui::SliderFloat("Var2", &var2, 0.f, 0.1f);
+		ImGui::SliderFloat("Var3", &var3, 0.f, 0.1f);
 		ImGui::EndMenu();
 	}
 
@@ -896,6 +905,16 @@ void SphereRenderer::display()
 	programSurface->setUniform("coloring", uint(coloring));
 	programSurface->setUniform("environment", environmentMapping);
 	programSurface->setUniform("lens", lens);
+
+	programSurface->setUniform("gridScale", gridSize);
+	programSurface->setUniform("gridDepth", gridDepth);
+	programSurface->setUniform("minb", bounds.first);
+	programSurface->setUniform("maxb", bounds.second);
+	const auto t = float(glfwGetTime());
+	programSurface->setUniform("time", t);
+	programSurface->setUniform("var1", var1);
+	programSurface->setUniform("var2", var2);
+	programSurface->setUniform("var3", var3);
 
 	m_vaoQuad->bind();
 	programSurface->use();

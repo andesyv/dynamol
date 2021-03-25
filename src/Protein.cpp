@@ -228,12 +228,12 @@ void Protein::load(const std::string& filename)
 	// Generate LOD (for testing):
 	const auto& atom = m_atoms.back();
 	m_genAtomsDense.reserve(atom.size() * 10);
-	const auto offset = 0.1;
+	const auto offset = 80.0;
 	for (const auto& particle : atom) {
 		// Generate some particles with random offsets to the parent:
 		for (uint i{0}; i < 10; ++i) {
-			const auto r = [offset](){ return ((ran() % 1000 * 0.001f) - 0.5) * offset; };
-			auto p = particle + glm::vec4{r(), r(), r(), 0.f};
+			const auto r = [offset](){ return ((ran() % 1000 * 0.001) - 0.5) * offset; };
+			auto p = particle + static_cast<glm::vec4>(glm::dvec4{r(), r(), r(), 0.0});
 			m_genAtomsDense.push_back(p);
 		}
 	}

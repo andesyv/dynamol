@@ -3,6 +3,8 @@
 #include "/defines.glsl"
 #include "/globals.glsl"
 
+#define BIAS 0.001
+
 layout(pixel_center_integer) in vec4 gl_FragCoord;
 
 uniform mat4 modelViewMatrix;
@@ -28,6 +30,15 @@ uniform sampler2D environmentTexture;
 uniform sampler2D bumpTexture;
 uniform sampler2D materialTexture;
 uniform usampler2D offsetTexture;
+
+uniform uint gridScale = 1;
+uniform uint gridDepth = 1;
+uniform vec3 minb;
+uniform vec3 maxb;
+uniform float time = 0.0;
+uniform float var1 = 0.0;
+uniform float var2 = 0.0;
+uniform float var3 = 0.0;
 
 in vec4 gFragmentPosition;
 out vec4 surfacePosition;
@@ -73,6 +84,22 @@ struct BufferEntry
 	vec3 center;
 	uint id;
 	uint previous;
+};
+
+struct Cell
+{
+	// Sum of positions in this cell
+	uvec4 pos;
+	// Count of particles in this cell
+	uint count;
+	// Offset to first child cell.
+	// Child cells: [offset, offset + 1, offset + 2, ..., offset + 7]
+	// uint childOffset;
+};
+
+layout(std430, binding = 7) buffer scenegraphBuffer
+{
+	Cell cells[];
 };
 
 layout(std430, binding = 1) buffer intersectionBuffer
@@ -296,6 +323,38 @@ void main()
 					
 					surfaceDistance = sqrt(-log(sumValue) / (s))-1.0;
 
+					/// Adjust surface based on higher LOD
+					uint LOD = 6;
+					// 1. Navigate to correct cell:
+					uint index = 0;
+					const uint gridScale3 = gridScale * gridScale * gridScale;
+					uint gridStep = 1;
+					for (uint j = 0; j < LOD; ++j)
+						gridStep *= gridScale;
+					for (uint d = 1; d < LOD; ++d) {
+						index += d * d * d * gridScale3;
+					}
+
+					vec3 bdir = (maxb - minb + 2.0 * BIAS).xyz / float(gridStep);
+
+					// Calculate index:
+					vec3 dir = currentPosition.xyz - minb - BIAS;
+					ivec3 gridIndex = ivec3(floor(dir / bdir));
+					index += gridIndex.x + gridIndex.y * gridStep + gridIndex.z * gridStep * gridStep;
+					// if (584 < index)
+					// 	discard;
+
+					// 2. Find distance to average cell position:
+					/// (divide by 1000 because position is multiplied by 1000 for precision preservation)
+					vec3 cellPos = vec3(cells[index].pos.xyz) / float(cells[index].count * 1000);
+
+					float adjustedDistance = max(length(cellPos - currentPosition.xyz) - 100.0, 0.);
+					// diffuseColor = vec3(adjustedDistance / 100.0);
+
+					// 3. Adjust distance based on new surface field:
+					surfaceDistance += adjustedDistance * var1;
+
+
 					if (surfaceDistance < eps)
 					{
 						if (currentPosition.w <= closestPosition.w)
@@ -322,7 +381,7 @@ void main()
 
 					// Over-relaxation according to the approach described by Keinert et al.
 					// However, we simply skip overstepping correction, since it is basically invisible.
-					// Benjamin Keinert, Henry Schäfer, Johann Korndörfer, Urs Ganse, and Marc Stamminger.
+					// Benjamin Keinert, Henry Schï¿½fer, Johann Korndï¿½rfer, Urs Ganse, and Marc Stamminger.
 					// Enhanced Sphere Tracing. Proceedings of Smart Tools and Apps for Graphics (Eurographics Italian Chapter Conference), pp. 1--8, 2014. 
 					// http://dx.doi.org/10.2312/stag.20141233
 					t += surfaceDistance*omega;

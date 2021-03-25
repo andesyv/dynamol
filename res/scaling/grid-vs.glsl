@@ -7,7 +7,7 @@ layout(location = 0) in vec3 inPos;
 uniform mat4 modelViewProjectionMatrix = mat4(1.0);
 uniform mat4 inverseModelViewProjectionMatrix = mat4(1.0);
 uniform uint gridScale = 2;
-uniform uint gridDepth = 3;
+uniform uint gridDepth = 9;
 uniform vec3 minb;
 uniform vec3 maxb;
 
@@ -41,7 +41,9 @@ void main() {
     uint offsetIndex = 0;
 
     for (uint d = 1; d <= gridDepth; ++d) {
-        const uint gridStep = gridScale * d;
+        uint gridStep = 1;
+        for (uint j = 0; j < d; ++j)
+            gridStep *= gridScale;
         vec3 bdir = (maxb - minb + 2.0 * BIAS).xyz / float(gridStep);
 
         // Calculate index:
