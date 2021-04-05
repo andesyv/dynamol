@@ -13,6 +13,8 @@ uniform float radiusScale;
 uniform float clipRadiusScale;
 uniform float nearPlaneZ = -0.125;
 
+uniform float replaceScale = 0.0;
+
 /** The number of sides in the bounding polygon. Must be even. */
 #define N 4
 
@@ -216,12 +218,21 @@ layout(std140, binding = 0) uniform elementBlock
 	Element elements[32];
 };
 
+layout(binding = 4) uniform atomic_uint redrawCount;
+layout(std430, binding = 4) buffer discardedVertices
+{
+    vec4 redrawPositions[];
+};
+
+uniform float radiusThreshold = 0.0;
+
 void main()
 {
 	uint sphereId = floatBitsToUint(gl_in[0].gl_Position.w);
 	uint elementId = bitfieldExtract(sphereId,0,8);
-	float sphereRadius = elements[elementId].radius*radiusScale;
-	float sphereClipRadius = elements[elementId].radius*clipRadiusScale;
+    const float instanceScale = mix(1., 2., float(gl_PrimitiveIDIn) / 100.0);
+	float sphereRadius = 1.7/*elements[elementId].radius*/*radiusScale * instanceScale;
+	float sphereClipRadius = 1.7/*elements[elementId].radius*/*clipRadiusScale * instanceScale;
 	
 	gSphereId = sphereId;
 	gSpherePosition = gl_in[0].gl_Position;
@@ -231,6 +242,13 @@ void main()
 	
 	vec4 size = modelViewMatrix * vec4(sphereRadius,0.0,0.0,0.0);
 	float radius = length(size);
+
+    // If radius is above a certain threshold, subdivide into smaller LOD in next step:
+    if (radius > radiusThreshold) {
+        uint index = atomicCounterIncrement(redrawCount);
+        redrawPositions[index] = gl_in[0].gl_Position;
+        return;
+    }
 
 	vec4 clipSize = modelViewMatrix * vec4( sphereClipRadius, 0.0,0.0,0.0);
 	float clipRadius = length(clipSize);

@@ -8,6 +8,7 @@
 #include "Scene.h"
 #include "Protein.h"
 #include <sstream>
+#include <array>
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -182,6 +183,14 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer)
 			{ GL_VERTEX_SHADER,"./res/scaling/grid-vs.glsl" },
 			{ GL_FRAGMENT_SHADER,"./res/scaling/grid-fs.glsl" },
 		});
+
+	createShaderProgram("test", {
+		{ GL_VERTEX_SHADER, "./res/sphere/image-vs.glsl"},
+		// { GL_TESS_CONTROL_SHADER, "./res/scaling/test-tcs.glsl"},
+		// { GL_TESS_EVALUATION_SHADER, "./res/scaling/test-es.glsl"},
+		{ GL_GEOMETRY_SHADER, "./res/sphere/image-gs.glsl"},
+		{ GL_FRAGMENT_SHADER,"./res/scaling/test-fs.glsl" },
+	});
 
 	m_framebufferSize = viewer->viewportSize();
 
@@ -381,6 +390,51 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer)
 	vertexBinding->setBuffer(m_denseAtomVertices.get(), 0, sizeof(glm::vec4));
 	vertexBinding->setFormat(4, GL_FLOAT);
 	m_gridVAO->enable(0);
+
+	// Sparse points:
+	m_sparseAtomVertices = Buffer::create();
+	m_sparseAtomVertices->setStorage(viewer->scene()->protein()->m_genAtomsSparse, gl::GL_NONE_BIT);
+	m_sparseVertexCount = static_cast<gl::GLsizei>(viewer->scene()->protein()->m_genAtomsSparse.size());
+
+	m_sparseVAO = std::make_unique<globjects::VertexArray>();
+	vertexBinding = m_sparseVAO->binding(0);
+	vertexBinding->setAttribute(0);
+	vertexBinding->setBuffer(m_sparseAtomVertices.get(), 0, sizeof(glm::vec4));
+	vertexBinding->setFormat(4, GL_FLOAT);
+	m_sparseVAO->enable(0);
+
+	// Triangle:
+	const auto verts = std::to_array<GLfloat>({
+		-0.5f, -0.5f, 0.f,
+		0.f, 0.5f, 0.f,
+		0.5f, -0.5f, 0.f,
+	});
+	m_triangleVertices = Buffer::create();
+	m_triangleVertices->setStorage(verts, gl::GL_NONE_BIT);
+	
+	m_triangleVAO = std::make_unique<globjects::VertexArray>();
+	vertexBinding = m_triangleVAO->binding(0);
+	vertexBinding->setAttribute(0);
+	vertexBinding->setBuffer(m_triangleVertices.get(), 0, sizeof(glm::vec3));
+	vertexBinding->setFormat(3, GL_FLOAT);
+	m_triangleVAO->enable(0);
+
+	// LOD redrawing buffer and counter:
+	m_redrawCounter = std::make_unique<globjects::Buffer>();
+	m_redrawCounter->setStorage(GLuint{0}, gl::GL_MAP_READ_BIT);
+
+	m_redrawPositions = {std::make_unique<globjects::Buffer>(), std::make_unique<globjects::Buffer>()};
+	m_redrawPositions[0]->setStorage(sizeof(glm::vec4) * m_sparseVertexCount, nullptr, gl::GL_DYNAMIC_STORAGE_BIT | gl::GL_MAP_READ_BIT);
+	m_redrawPositions[1]->setStorage(sizeof(glm::vec4) * m_sparseVertexCount, nullptr, gl::GL_DYNAMIC_STORAGE_BIT | gl::GL_MAP_READ_BIT);
+
+	
+	// m_redrawingVertices = Buffer::create();
+	m_redrawingVAO = std::make_unique<globjects::VertexArray>();
+	vertexBinding = m_redrawingVAO->binding(0);
+	vertexBinding->setAttribute(0);
+	vertexBinding->setBuffer(m_redrawPositions[1].get(), 0, sizeof(glm::vec4));
+	vertexBinding->setFormat(4, GL_FLOAT);
+	m_triangleVAO->enable(0);
 }
 
 void SphereRenderer::display()
@@ -425,6 +479,7 @@ void SphereRenderer::display()
 	auto programDisplay = shaderProgram("display");
 	auto programShadow = shaderProgram("shadow");
 	auto programGrid = shaderProgram("grid");
+	auto programTest = shaderProgram("test");
 
 	
 	// get cursor position for magic lens
@@ -644,7 +699,7 @@ void SphereRenderer::display()
 	}
 
 	if (ImGui::BeginMenu("Other Shit")) {
-		ImGui::SliderFloat("Var1", &var1, 0.f, 0.1f);
+		ImGui::SliderFloat("RadiusThreshold", &var1, 0.f, 0.1f);
 		ImGui::SliderFloat("Var2", &var2, 0.f, 100.f);
 		ImGui::SliderFloat("Var3", &var3, 0.f, 0.1f);
 		ImGui::EndMenu();
@@ -811,15 +866,27 @@ void SphereRenderer::display()
 	programSphere->setUniform("animationAmplitude", animationAmplitude);
 	programSphere->setUniform("animationFrequency", animationFrequency);
 
-	m_vao->bind();
+	m_sparseVAO->bind();
 	programSphere->use();
-	m_vao->drawArrays(GL_POINTS, 0, vertexCount);
+	m_sparseVAO->drawArrays(GL_POINTS, 0, m_sparseVertexCount);
 	programSphere->release();
-	m_vao->unbind();
+	m_sparseVAO->unbind();
 
 	//////////////////////////////////////////////////////////////////////////
 	// List generation pass
 	//////////////////////////////////////////////////////////////////////////
+	GLuint redrawCount = m_sparseVertexCount;
+	unsigned int pingpong_index = 0;
+
+	const auto rebindRedrawVAO = [&](const auto& buffer){
+		auto binding = m_redrawingVAO->binding(0);
+		binding->setAttribute(0);
+		binding->setBuffer(buffer.get(), 0, sizeof(glm::vec4));
+		binding->setFormat(4, GL_FLOAT);
+		m_redrawingVAO->enable(0);
+	};
+	rebindRedrawVAO(m_sparseAtomVertices);
+
 	const uint intersectionClearValue = 1;
 	m_intersectionBuffer->clearSubData(GL_R32UI, 0, sizeof(uint), GL_RED_INTEGER, GL_UNSIGNED_INT, &intersectionClearValue);
 
@@ -832,34 +899,61 @@ void SphereRenderer::display()
 	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 	glDepthMask(GL_FALSE);
 
-	m_spherePositionTexture->bindActive(0);
-	m_offsetTexture->bindImageTexture(0, 0, false, 0, GL_READ_WRITE, GL_R32UI);
-	m_elementColorsRadii->bindBase(GL_UNIFORM_BUFFER, 0);
-	m_residueColors->bindBase(GL_UNIFORM_BUFFER, 1);
-	m_chainColors->bindBase(GL_UNIFORM_BUFFER, 2);
+	for (int iteration = 1; redrawCount != 0; ++iteration) {
+		// Clear buffers:
+		m_redrawCounter->clearData(GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, nullptr);
+		m_redrawPositions[pingpong_index]->clearSubData(GL_RGBA32F, 0, sizeof(glm::vec4) * m_sparseVertexCount, GL_RGBA, GL_FLOAT, nullptr);
 
-	programSpawn->setUniform("modelViewMatrix", modelViewMatrix);
-	programSpawn->setUniform("projectionMatrix", projectionMatrix);
-	programSpawn->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
-	programSpawn->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
-	programSpawn->setUniform("radiusScale", radiusScale);
-	programSpawn->setUniform("clipRadiusScale", radiusScale);
-	programSpawn->setUniform("nearPlaneZ", nearPlane.z);
-	programSpawn->setUniform("animationDelta", animationDelta);
-	programSpawn->setUniform("animationTime", animationTime);
-	programSpawn->setUniform("animationAmplitude", animationAmplitude);
-	programSpawn->setUniform("animationFrequency", animationFrequency);
+		m_spherePositionTexture->bindActive(0);
+		m_offsetTexture->bindImageTexture(0, 0, false, 0, GL_READ_WRITE, GL_R32UI);
+		m_elementColorsRadii->bindBase(GL_UNIFORM_BUFFER, 0);
+		m_residueColors->bindBase(GL_UNIFORM_BUFFER, 1);
+		m_chainColors->bindBase(GL_UNIFORM_BUFFER, 2);
+		m_redrawCounter->bindBase(GL_ATOMIC_COUNTER_BUFFER, 4);
+		m_redrawPositions[pingpong_index]->bindBase(GL_SHADER_STORAGE_BUFFER, 4);
 
-	m_vao->bind();
-	programSpawn->use();
-	m_vao->drawArrays(GL_POINTS, 0, vertexCount);
-	programSpawn->release();
-	m_vao->unbind();
+		programSpawn->setUniform("modelViewMatrix", modelViewMatrix);
+		programSpawn->setUniform("projectionMatrix", projectionMatrix);
+		programSpawn->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
+		programSpawn->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
+		programSpawn->setUniform("radiusScale", radiusScale * std::powf(0.9f, iteration));
+		programSpawn->setUniform("clipRadiusScale", radiusScale * std::powf(0.9f, iteration));
+		programSpawn->setUniform("nearPlaneZ", nearPlane.z);
+		programSpawn->setUniform("animationDelta", animationDelta);
+		programSpawn->setUniform("animationTime", animationTime);
+		programSpawn->setUniform("animationAmplitude", animationAmplitude);
+		programSpawn->setUniform("animationFrequency", animationFrequency);
+		programSpawn->setUniform("radiusThreshold", var1);
+
+		m_redrawingVAO->bind();
+		programSpawn->use();
+		m_redrawingVAO->drawArrays(GL_POINTS, 0, redrawCount);
+		programSpawn->release();
+		m_redrawingVAO->unbind();
 
 
-	m_spherePositionTexture->unbindActive(0);
-	m_intersectionBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
-	m_offsetTexture->unbindImageTexture(0);
+		m_spherePositionTexture->unbindActive(0);
+		m_intersectionBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
+		m_offsetTexture->unbindImageTexture(0);
+		m_redrawPositions[pingpong_index]->unbind(GL_SHADER_STORAGE_BUFFER);
+		m_redrawCounter->unbind(GL_ATOMIC_COUNTER_BUFFER);
+
+		/// Switch buffers:
+
+		// Memory barrier to ensure synchronization of values from shader.
+		glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+		// Note: Expensive data fetch
+		const auto newCount = m_redrawCounter->getSubData<GLuint, 1>()[0];
+		// If we for some reason didn't change how many points we need to render, skip to prevent infinite loops:
+		if (redrawCount == newCount)
+			break;
+		
+		redrawCount = newCount;
+		rebindRedrawVAO(m_redrawPositions[pingpong_index]);
+
+		pingpong_index = !pingpong_index;
+	}
+
 
 	m_sphereFramebuffer->unbind();
 	glMemoryBarrier(GL_ALL_BARRIER_BITS);
@@ -1175,6 +1269,19 @@ void SphereRenderer::display()
 		m_sphereDiffuseTexture->unbindActive(0);
 		m_shadeFramebuffer->unbind();
 	}
+
+	// Draw test square
+
+	// m_offsetTexture->bindImageTexture(0, 0, false, 0, GL_READ_WRITE, GL_R32UI);
+	// m_offsetTexture->bindActive(0);
+
+	// glPatchParameteri(GL_PATCH_VERTICES, 1);
+	// m_vaoQuad->bind();
+	// programTest->use();
+	// m_redrawCounter->bindBase(GL_ATOMIC_COUNTER_BUFFER, 4);
+	// m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
+	// programTest->release();
+	// m_vaoQuad->unbind();
 
 	if (viewportSize == viewer()->viewportSize())
 	{

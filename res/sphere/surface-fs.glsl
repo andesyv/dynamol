@@ -323,6 +323,7 @@ void main()
 					
 					surfaceDistance = sqrt(-log(sumValue) / (s))-1.0;
 
+					/*
 					/// Adjust surface based on higher LOD
 					uint LOD = 6;
 					// 1. Navigate to correct cell:
@@ -381,7 +382,7 @@ void main()
 					// 3. Adjust distance based on new surface field:
 					if (abs(dist) < 1000.0)
 						surfaceDistance += dist * var1;
-
+					*/
 
 					if (surfaceDistance < eps)
 					{

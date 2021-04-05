@@ -39,6 +39,7 @@ void main() {
     vPos = p.xyz;
 
     uint offsetIndex = 0;
+    uint lastIndex = 0;
 
     for (uint d = 1; d <= gridDepth; ++d) {
         uint gridStep = 1;

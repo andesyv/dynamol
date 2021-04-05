@@ -234,8 +234,18 @@ void Protein::load(const std::string& filename)
 		for (uint i{0}; i < 10; ++i) {
 			const auto r = [offset](){ return ((ran() % 1000 * 0.001) - 0.5) * offset; };
 			auto p = particle + static_cast<glm::vec4>(glm::dvec4{r(), r(), r(), 0.0});
+			// p.w = 1.0;
 			m_genAtomsDense.push_back(p);
 		}
+	}
+
+	// Generate sparse LOD
+	const std::size_t pointCount = 100;
+	m_genAtomsSparse.reserve(pointCount);
+	const auto center = 0.5f * m_minimumBounds + 0.5f * m_maximumBounds;
+	for (std::size_t i{0}; i < atom.size() && m_genAtomsSparse.size() < pointCount; i += atom.size() / pointCount) {
+		const auto r = [offset](){ return ((ran() % 1000 * 0.001) - 0.5) * offset; };
+		m_genAtomsSparse.push_back(glm::vec4{center, 0.f} + glm::vec4{r(), r(), r(), atom.at(i).w});
 	}
 }
 
