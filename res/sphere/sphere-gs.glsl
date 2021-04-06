@@ -230,7 +230,7 @@ void main()
 {
 	uint sphereId = floatBitsToUint(gl_in[0].gl_Position.w);
 	uint elementId = bitfieldExtract(sphereId,0,8);
-    const float instanceScale = mix(1., 2., float(gl_PrimitiveIDIn) / 100.0);
+    const float instanceScale = mix(1., 2., float(elementId) / 1000.0);
 	float sphereRadius = 1.7/*elements[elementId].radius*/*radiusScale * instanceScale;
 	float sphereClipRadius = 1.7/*elements[elementId].radius*/*clipRadiusScale * instanceScale;
 	

@@ -3,7 +3,9 @@
 #include "/defines.glsl"
 
 in vec4 position;
+#ifdef INTERPOLATION
 in vec4 nextPosition;
+#endif
 uniform float animationDelta;
 uniform float animationTime;
 uniform float animationAmplitude;

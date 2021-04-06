@@ -762,14 +762,14 @@ void SphereRenderer::display()
 	vertexBinding->setFormat(4, GL_FLOAT);
 	m_vao->enable(0);
 
-	if (timestepCount > 0)
-	{
-		auto nextVertexBinding = m_vao->binding(1);
-		nextVertexBinding->setAttribute(1);
-		nextVertexBinding->setBuffer(m_vertices[nextTimestep].get(), 0, sizeof(vec4));
-		nextVertexBinding->setFormat(4, GL_FLOAT);
-		m_vao->enable(1);
-	}
+	// if (timestepCount > 0)
+	// {
+	// 	auto nextVertexBinding = m_vao->binding(1);
+	// 	nextVertexBinding->setAttribute(1);
+	// 	nextVertexBinding->setBuffer(m_vertices[nextTimestep].get(), 0, sizeof(vec4));
+	// 	nextVertexBinding->setFormat(4, GL_FLOAT);
+	// 	m_vao->enable(1);
+	// }
 
 	//////////////////////////////////////////////////////////////////////////
 	// Grid calculation pass
@@ -851,26 +851,26 @@ void SphereRenderer::display()
 	glClearColor(0.0, 0.0, 0.0, 65535.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LESS);
+	// glEnable(GL_DEPTH_TEST);
+	// glDepthFunc(GL_LESS);
 
-	programSphere->setUniform("modelViewMatrix", modelViewMatrix);
-	programSphere->setUniform("projectionMatrix", projectionMatrix);
-	programSphere->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
-	programSphere->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
-	programSphere->setUniform("radiusScale", 1.0f);
-	programSphere->setUniform("clipRadiusScale", radiusScale);
-	programSphere->setUniform("nearPlaneZ", nearPlane.z);
-	programSphere->setUniform("animationDelta", animationDelta);
-	programSphere->setUniform("animationTime", animationTime);
-	programSphere->setUniform("animationAmplitude", animationAmplitude);
-	programSphere->setUniform("animationFrequency", animationFrequency);
+	// programSphere->setUniform("modelViewMatrix", modelViewMatrix);
+	// programSphere->setUniform("projectionMatrix", projectionMatrix);
+	// programSphere->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
+	// programSphere->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
+	// programSphere->setUniform("radiusScale", 1.0f);
+	// programSphere->setUniform("clipRadiusScale", radiusScale);
+	// programSphere->setUniform("nearPlaneZ", nearPlane.z);
+	// programSphere->setUniform("animationDelta", animationDelta);
+	// programSphere->setUniform("animationTime", animationTime);
+	// programSphere->setUniform("animationAmplitude", animationAmplitude);
+	// programSphere->setUniform("animationFrequency", animationFrequency);
 
-	m_sparseVAO->bind();
-	programSphere->use();
-	m_sparseVAO->drawArrays(GL_POINTS, 0, m_sparseVertexCount);
-	programSphere->release();
-	m_sparseVAO->unbind();
+	// m_sparseVAO->bind();
+	// programSphere->use();
+	// m_sparseVAO->drawArrays(GL_POINTS, 0, m_sparseVertexCount);
+	// programSphere->release();
+	// m_sparseVAO->unbind();
 
 	//////////////////////////////////////////////////////////////////////////
 	// List generation pass
@@ -886,6 +886,8 @@ void SphereRenderer::display()
 		m_redrawingVAO->enable(0);
 	};
 	rebindRedrawVAO(m_sparseAtomVertices);
+	m_redrawPositions[0]->clearSubData(GL_RGBA32F, 0, sizeof(glm::vec4) * m_sparseVertexCount, GL_RGBA, GL_FLOAT, nullptr);
+	m_redrawPositions[1]->clearSubData(GL_RGBA32F, 0, sizeof(glm::vec4) * m_sparseVertexCount, GL_RGBA, GL_FLOAT, nullptr);
 
 	const uint intersectionClearValue = 1;
 	m_intersectionBuffer->clearSubData(GL_R32UI, 0, sizeof(uint), GL_RED_INTEGER, GL_UNSIGNED_INT, &intersectionClearValue);
@@ -898,6 +900,7 @@ void SphereRenderer::display()
 	glDepthFunc(GL_ALWAYS);
 	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 	glDepthMask(GL_FALSE);
+
 
 	for (int iteration = 1; redrawCount != 0; ++iteration) {
 		// Clear buffers:
