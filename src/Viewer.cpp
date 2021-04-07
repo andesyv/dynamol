@@ -16,6 +16,7 @@
 #include "CameraInteractor.h"
 #include "BoundingBoxRenderer.h"
 #include "SphereRenderer.h"
+#include "ImageDepthScaleRenderer.h"
 #include "ScalableRenderer.h"
 #include "Scene.h"
 #include "Protein.h"
@@ -53,10 +54,10 @@ Viewer::Viewer(GLFWwindow *window, Scene *scene) : m_window(window), m_scene(sce
 	io.Fonts->AddFontFromFileTTF("./res/ui/Lato-Semibold.ttf", 18);
 
 	m_interactors.emplace_back(std::make_unique<CameraInteractor>(this));
-	m_renderers.emplace_back(std::make_unique<SphereRenderer>(this));
+	m_renderers.emplace_back(std::make_unique<SphereRenderer>(this))->setEnabled(false);
 	m_renderers.emplace_back(std::make_unique<BoundingBoxRenderer>(this));
-	m_renderers.emplace_back(std::make_unique<ScalableRenderer>(this));
-	m_renderers.back()->setEnabled(false);
+	m_renderers.emplace_back(std::make_unique<ScalableRenderer>(this))->setEnabled(false);
+	m_renderers.emplace_back(std::make_unique<ImageDepthScaleRenderer>(this));
 
 	int i = 1;
 

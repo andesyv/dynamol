@@ -34,7 +34,7 @@ int pow(int a, unsigned int p) {
 	else return a * tmp * tmp;
 }
 
-std::unique_ptr<Texture> loadTexture(const std::string& filename)
+std::unique_ptr<Texture> SphereRenderer::loadTexture(const std::string& filename)
 {
 	int width, height, channels;
 

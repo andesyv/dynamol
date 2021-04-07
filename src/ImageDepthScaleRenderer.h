@@ -20,21 +20,15 @@
 #include <globjects/NamedString.h>
 #include <globjects/base/StaticStringSource.h>
 
-namespace globjects {
-class Texture;
-}
-
 namespace dynamol
 {
 	class Viewer;
 
-	class SphereRenderer : public Renderer
+	class ImageDepthScaleRenderer : public Renderer
 	{
 	public:
-		SphereRenderer(Viewer *viewer);
+		ImageDepthScaleRenderer(Viewer *viewer);
 		virtual void display();
-
-		static std::unique_ptr<globjects::Texture> loadTexture(const std::string& filename);
 
 	private:
 		
@@ -83,16 +77,12 @@ namespace dynamol
 		glm::ivec2 m_shadowMapSize = glm::ivec2(512, 512);
 		glm::ivec2 m_framebufferSize;
 
-		std::unique_ptr<globjects::Buffer> m_sceneGraphBuffer, m_denseAtomVertices,
-											m_sparseAtomVertices, m_triangleVertices;
-		std::unique_ptr<globjects::VertexArray> m_gridVAO = std::make_unique<globjects::VertexArray>();
-		std::unique_ptr<globjects::VertexArray> m_sparseVAO, m_triangleVAO, m_redrawingVAO, m_gridToPointVAO;
-		gl::GLsizei m_denseVertexCount{0}, m_sparseVertexCount{0};
-		const glm::uint gridSize = 2;
-		const glm::uint gridDepth = 9;
+		std::array<std::unique_ptr<globjects::Texture>, 2> m_LODDepthFramebuffer_Color;
+		std::array<std::unique_ptr<globjects::Texture>, 2> m_LODDepthFramebuffer_Depth;
+		std::array<std::unique_ptr<globjects::Framebuffer>, 2> m_LODDepthFramebuffer;
 
-		std::unique_ptr<globjects::Buffer> m_redrawCounter, m_initialGridPoints;
-		std::array<std::unique_ptr<globjects::Buffer>, 2> m_redrawIndices;
+		std::unique_ptr<globjects::Buffer> m_sparseAtomVertices;
+		gl::GLsizei m_sparseVertexCount;
 	};
 
 }
