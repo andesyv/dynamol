@@ -123,6 +123,13 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer)
 		},
 		{ "./res/sphere/globals.glsl" });
 
+	createShaderProgram("spawn-iteration", {
+			{ GL_VERTEX_SHADER,"./res/scaling/normalize-grid-vs.glsl" },
+			{ GL_GEOMETRY_SHADER,"./res/sphere/sphere-gs.glsl" },
+			{ GL_FRAGMENT_SHADER,"./res/sphere/spawn-fs.glsl" },
+		},
+		{ "./res/sphere/globals.glsl" });
+
 	createShaderProgram("surface", {
 			{ GL_VERTEX_SHADER,"./res/sphere/image-vs.glsl" },
 			{ GL_GEOMETRY_SHADER,"./res/sphere/image-gs.glsl" },
@@ -185,11 +192,16 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer)
 		});
 
 	createShaderProgram("test", {
-		{ GL_VERTEX_SHADER, "./res/sphere/image-vs.glsl"},
+		{ GL_VERTEX_SHADER, "./res/scaling/test-vs.glsl"},
 		// { GL_TESS_CONTROL_SHADER, "./res/scaling/test-tcs.glsl"},
 		// { GL_TESS_EVALUATION_SHADER, "./res/scaling/test-es.glsl"},
-		{ GL_GEOMETRY_SHADER, "./res/sphere/image-gs.glsl"},
+		// { GL_GEOMETRY_SHADER, "./res/sphere/image-gs.glsl"},
 		{ GL_FRAGMENT_SHADER,"./res/scaling/test-fs.glsl" },
+	});
+
+	createShaderProgram("grid-to-points", {
+		{ GL_VERTEX_SHADER, "./res/scaling/grid-generate-vs.glsl"},
+		{ GL_FRAGMENT_SHADER, "./res/scaling/grid-fs.glsl"},
 	});
 
 	m_framebufferSize = viewer->viewportSize();
@@ -403,11 +415,11 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer)
 	vertexBinding->setFormat(4, GL_FLOAT);
 	m_sparseVAO->enable(0);
 
-	// Triangle:
+	// Triangle (xyz, rgb, uv):
 	const auto verts = std::to_array<GLfloat>({
-		-0.5f, -0.5f, 0.f,
-		0.f, 0.5f, 0.f,
-		0.5f, -0.5f, 0.f,
+		-0.5f, -0.5f, 0.f,		1.f, 0.f, 0.f,		0.f, 0.f,
+		0.f, 0.5f, 0.f,			0.f, 1.f, 0.f,		0.5f, 1.f,
+		0.5f, -0.5f, 0.f,		0.f, 0.f, 1.f,		1.f, 0.f,
 	});
 	m_triangleVertices = Buffer::create();
 	m_triangleVertices->setStorage(verts, gl::GL_NONE_BIT);
@@ -415,26 +427,52 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer)
 	m_triangleVAO = std::make_unique<globjects::VertexArray>();
 	vertexBinding = m_triangleVAO->binding(0);
 	vertexBinding->setAttribute(0);
-	vertexBinding->setBuffer(m_triangleVertices.get(), 0, sizeof(glm::vec3));
+	vertexBinding->setBuffer(m_triangleVertices.get(), 0, sizeof(GLfloat) * verts.size() / 3);
 	vertexBinding->setFormat(3, GL_FLOAT);
 	m_triangleVAO->enable(0);
+
+	vertexBinding = m_triangleVAO->binding(1);
+	vertexBinding->setAttribute(1);
+	vertexBinding->setBuffer(m_triangleVertices.get(), 3 * sizeof(GLfloat), sizeof(GLfloat) * verts.size() / 3);
+	vertexBinding->setFormat(3, GL_FLOAT);
+	m_triangleVAO->enable(1);
+	
+	vertexBinding = m_triangleVAO->binding(2);
+	vertexBinding->setAttribute(2);
+	vertexBinding->setBuffer(m_triangleVertices.get(), 6 * sizeof(GLfloat), sizeof(GLfloat) * verts.size() / 3);
+	vertexBinding->setFormat(2, GL_FLOAT);
+	m_triangleVAO->enable(2);
 
 	// LOD redrawing buffer and counter:
 	m_redrawCounter = std::make_unique<globjects::Buffer>();
 	m_redrawCounter->setStorage(GLuint{0}, gl::GL_MAP_READ_BIT);
 
-	m_redrawPositions = {std::make_unique<globjects::Buffer>(), std::make_unique<globjects::Buffer>()};
-	m_redrawPositions[0]->setStorage(sizeof(glm::vec4) * m_sparseVertexCount, nullptr, gl::GL_DYNAMIC_STORAGE_BIT | gl::GL_MAP_READ_BIT);
-	m_redrawPositions[1]->setStorage(sizeof(glm::vec4) * m_sparseVertexCount, nullptr, gl::GL_DYNAMIC_STORAGE_BIT | gl::GL_MAP_READ_BIT);
+	m_redrawIndices = {std::make_unique<globjects::Buffer>(), std::make_unique<globjects::Buffer>()};
+	for (auto& indices : m_redrawIndices)
+		indices->setStorage(sizeof(GLuint) * m_sparseVertexCount * 9, nullptr, gl::GL_DYNAMIC_STORAGE_BIT | gl::GL_MAP_READ_BIT);
 
 	
-	// m_redrawingVertices = Buffer::create();
 	m_redrawingVAO = std::make_unique<globjects::VertexArray>();
 	vertexBinding = m_redrawingVAO->binding(0);
 	vertexBinding->setAttribute(0);
-	vertexBinding->setBuffer(m_redrawPositions[1].get(), 0, sizeof(glm::vec4));
+	vertexBinding->setBuffer(m_redrawIndices[1].get(), 0, sizeof(glm::vec4));
 	vertexBinding->setFormat(4, GL_FLOAT);
-	m_triangleVAO->enable(0);
+	m_redrawingVAO->enable(0);
+	
+	// gridToPoint VAO uses the same buffer as the grid buffer:
+	m_gridToPointVAO = std::make_unique<globjects::VertexArray>();
+	vertexBinding = m_gridToPointVAO->binding(0);
+	vertexBinding->setAttribute(0);
+	vertexBinding->setBuffer(m_sceneGraphBuffer.get(), 0, 2 * sizeof(glm::uvec4));
+	vertexBinding->setFormat(4, GL_UNSIGNED_INT);
+	m_gridToPointVAO->enable(0);
+	vertexBinding = m_gridToPointVAO->binding(1);
+	vertexBinding->setAttribute(1);
+	vertexBinding->setBuffer(m_sceneGraphBuffer.get(), sizeof(glm::uvec4), 2 * sizeof(glm::uvec4));
+	vertexBinding->setFormat(1, GL_UNSIGNED_INT);
+	m_gridToPointVAO->enable(1);
+
+	m_initialGridPoints = Buffer::create();
 }
 
 void SphereRenderer::display()
@@ -470,6 +508,7 @@ void SphereRenderer::display()
 
 	auto programSphere = shaderProgram("sphere");
 	auto programSpawn = shaderProgram("spawn");
+	auto programSpawnIteration = shaderProgram("spawn-iteration");
 	auto programSurface = shaderProgram("surface");
 	auto programAOSample = shaderProgram("aosample");
 	auto programAOBlur = shaderProgram("aoblur");
@@ -480,6 +519,7 @@ void SphereRenderer::display()
 	auto programShadow = shaderProgram("shadow");
 	auto programGrid = shaderProgram("grid");
 	auto programTest = shaderProgram("test");
+	auto programGridGenerate = shaderProgram("grid-to-points");
 
 	
 	// get cursor position for magic lens
@@ -556,7 +596,8 @@ void SphereRenderer::display()
 	static uint materialTextureIndex = 0;
 	static uint bumpTextureIndex = 0;
 
-	static float var1{0.01f}, var2{100.f}, var3{0.f};
+	static float replaceScaleParam{0.01f};
+	static int startLODParam{1};
 
 	// user interface for manipulating rendering parameters
 	if (ImGui::BeginMenu("Renderer"))
@@ -699,9 +740,8 @@ void SphereRenderer::display()
 	}
 
 	if (ImGui::BeginMenu("Other Shit")) {
-		ImGui::SliderFloat("RadiusThreshold", &var1, 0.f, 0.1f);
-		ImGui::SliderFloat("Var2", &var2, 0.f, 100.f);
-		ImGui::SliderFloat("Var3", &var3, 0.f, 0.1f);
+		ImGui::SliderFloat("ReplaceScale", &replaceScaleParam, 0.f, 1.f);
+		ImGui::SliderInt("Start LOD", &startLODParam, 1, 4);
 		ImGui::EndMenu();
 	}
 
@@ -774,13 +814,13 @@ void SphereRenderer::display()
 	//////////////////////////////////////////////////////////////////////////
 	// Grid calculation pass
 	//////////////////////////////////////////////////////////////////////////
-
 	// Clear SSBO
 	// Use sum of geometric series (a = 8, k = 8) to calculate grid size.
 	const unsigned long long gridCount = (pow(8, gridDepth + 1) - 8) / 7;
 	// std::vector<std::pair<glm::uvec4, glm::uvec4>> emptyBuffer{};
 	// emptyBuffer.resize(gridCount, {});
-	m_sceneGraphBuffer->clearSubData(GL_RGBA32UI, 0, (sizeof(glm::uvec4) + sizeof(glm::uvec4)) * gridCount, GL_RGBA, GL_UNSIGNED_INT, nullptr);
+	m_sceneGraphBuffer->clearSubData(GL_RGBA32UI, 0, 2 * sizeof(glm::uvec4) * gridCount, GL_RGBA, GL_UNSIGNED_INT, nullptr);
+	m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
 
 	const std::pair bounds{viewer()->scene()->protein()->minimumBounds(), viewer()->scene()->protein()->maximumBounds()};
 
@@ -791,12 +831,61 @@ void SphereRenderer::display()
 	programGrid->setUniform("minb", bounds.first);
 	programGrid->setUniform("maxb", bounds.second);
 
-	m_gridVAO->bind();
+	/// TODO: Remember I don't need to bind in order to use globject::drawArrays
+	m_sparseVAO->bind();
 	programGrid->use();
-	glDrawArrays(GL_POINTS, 0, m_denseVertexCount);
+	glPointSize(10.f);
+	m_sparseVAO->drawArrays(GL_POINTS, 0, m_sparseVertexCount);
 	programGrid->release();
-	m_gridVAO->unbind();
-	
+	m_sparseVAO->unbind();
+
+	m_sceneGraphBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
+
+	//////////////////////////////////////////////////////////////////////////
+	// Grid start points generation
+	//////////////////////////////////////////////////////////////////////////
+	glMemoryBarrier(GL_ALL_BARRIER_BITS);
+	glClearDepth(1.0f);
+	glClearColor(0.2, 0.2, 0.2, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glDisable(GL_DEPTH_TEST);
+	{
+		const unsigned int LOD = startLODParam;
+
+		glDisable(GL_DEPTH_TEST);
+		glPointSize(10.f);
+
+		m_initialGridPoints->setData(sizeof(glm::vec4) * pow(8, LOD), nullptr, GL_DYNAMIC_COPY);
+		m_initialGridPoints->bindBase(GL_SHADER_STORAGE_BUFFER, 5);
+		
+		vertexBinding = m_gridToPointVAO->binding(0);
+		vertexBinding->setAttribute(0);
+		vertexBinding->setBuffer(m_sceneGraphBuffer.get(), 0, 2 * sizeof(glm::vec4));
+		vertexBinding->setFormat(4, GL_UNSIGNED_INT);
+		m_gridToPointVAO->enable(0);
+		vertexBinding = m_gridToPointVAO->binding(1);
+		vertexBinding->setAttribute(1);
+		vertexBinding->setBuffer(m_sceneGraphBuffer.get(), sizeof(glm::vec4), 2 * sizeof(glm::vec4));
+		vertexBinding->setFormat(4, GL_UNSIGNED_INT);
+		m_gridToPointVAO->enable(1);
+		// glMemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+
+		m_gridToPointVAO->bind();
+
+		programGridGenerate->use();
+		programGridGenerate->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
+		programGridGenerate->setUniform("visualize", true);
+		// Draw points in the LOD range from the grid buffer:
+		const auto start = (pow(8, LOD) - 8) / 7;
+		const auto end = (pow(8, LOD+1) - 8) / 7;
+		const auto count = end - start;
+		m_gridToPointVAO->drawArrays(GL_POINTS, start, count);
+		programGridGenerate->release();
+		m_gridToPointVAO->unbind();
+
+		m_initialGridPoints->unbind(GL_SHADER_STORAGE_BUFFER);
+	}
+
 
 	//////////////////////////////////////////////////////////////////////////
 	// Shadow rendering pass
@@ -847,9 +936,6 @@ void SphereRenderer::display()
 	// Sphere rendering pass
 	//////////////////////////////////////////////////////////////////////////
 	m_sphereFramebuffer->bind();
-	glClearDepth(1.0f);
-	glClearColor(0.0, 0.0, 0.0, 65535.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	// glEnable(GL_DEPTH_TEST);
 	// glDepthFunc(GL_LESS);
@@ -875,19 +961,29 @@ void SphereRenderer::display()
 	//////////////////////////////////////////////////////////////////////////
 	// List generation pass
 	//////////////////////////////////////////////////////////////////////////
+/*
 	GLuint redrawCount = m_sparseVertexCount;
-	unsigned int pingpong_index = 0;
 
 	const auto rebindRedrawVAO = [&](const auto& buffer){
 		auto binding = m_redrawingVAO->binding(0);
 		binding->setAttribute(0);
-		binding->setBuffer(buffer.get(), 0, sizeof(glm::vec4));
-		binding->setFormat(4, GL_FLOAT);
+		binding->setBuffer(buffer.get(), 0, sizeof(GLuint));
+		binding->setFormat(1, GL_UNSIGNED_INT);
 		m_redrawingVAO->enable(0);
 	};
-	rebindRedrawVAO(m_sparseAtomVertices);
-	m_redrawPositions[0]->clearSubData(GL_RGBA32F, 0, sizeof(glm::vec4) * m_sparseVertexCount, GL_RGBA, GL_FLOAT, nullptr);
-	m_redrawPositions[1]->clearSubData(GL_RGBA32F, 0, sizeof(glm::vec4) * m_sparseVertexCount, GL_RGBA, GL_FLOAT, nullptr);
+
+
+	// Bind vao to start buffer (vec4):
+	auto binding = m_redrawingVAO->binding(0);
+	binding->setAttribute(0);
+	// Add memory barrier to make sure previous step completed.
+	glMemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+	binding->setBuffer(m_initialGridPoints.get(), 0, sizeof(glm::vec4));
+	binding->setFormat(4, GL_FLOAT);
+	m_redrawingVAO->enable(0);
+
+	for (auto& indices : m_redrawIndices)
+		indices->clearSubData(GL_R32UI, 0, sizeof(GLuint) * m_sparseVertexCount * 9, GL_RED_INTEGER, GL_UNSIGNED_INT, nullptr);
 
 	const uint intersectionClearValue = 1;
 	m_intersectionBuffer->clearSubData(GL_R32UI, 0, sizeof(uint), GL_RED_INTEGER, GL_UNSIGNED_INT, &intersectionClearValue);
@@ -902,10 +998,15 @@ void SphereRenderer::display()
 	glDepthMask(GL_FALSE);
 
 
-	for (int iteration = 1; redrawCount != 0; ++iteration) {
+	for (unsigned int iteration{1}, pingpong_index{0}; iteration < gridDepth - 1 && redrawCount != 0; ++iteration, pingpong_index = !pingpong_index) {
+		const bool bFirstIteration = iteration == 1;
+		auto& shader = bFirstIteration ? programSpawn : programSpawnIteration;
+
+		auto& currentRedrawIndices = m_redrawIndices[pingpong_index];
+
 		// Clear buffers:
 		m_redrawCounter->clearData(GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, nullptr);
-		m_redrawPositions[pingpong_index]->clearSubData(GL_RGBA32F, 0, sizeof(glm::vec4) * m_sparseVertexCount, GL_RGBA, GL_FLOAT, nullptr);
+		currentRedrawIndices->clearSubData(GL_R32UI, 0, sizeof(GLuint) * m_sparseVertexCount * 9, GL_RED_INTEGER, GL_UNSIGNED_INT, nullptr);
 
 		m_spherePositionTexture->bindActive(0);
 		m_offsetTexture->bindImageTexture(0, 0, false, 0, GL_READ_WRITE, GL_R32UI);
@@ -913,32 +1014,38 @@ void SphereRenderer::display()
 		m_residueColors->bindBase(GL_UNIFORM_BUFFER, 1);
 		m_chainColors->bindBase(GL_UNIFORM_BUFFER, 2);
 		m_redrawCounter->bindBase(GL_ATOMIC_COUNTER_BUFFER, 4);
-		m_redrawPositions[pingpong_index]->bindBase(GL_SHADER_STORAGE_BUFFER, 4);
+		currentRedrawIndices->bindBase(GL_SHADER_STORAGE_BUFFER, 4);
 
-		programSpawn->setUniform("modelViewMatrix", modelViewMatrix);
-		programSpawn->setUniform("projectionMatrix", projectionMatrix);
-		programSpawn->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
-		programSpawn->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
-		programSpawn->setUniform("radiusScale", radiusScale * std::powf(0.9f, iteration));
-		programSpawn->setUniform("clipRadiusScale", radiusScale * std::powf(0.9f, iteration));
-		programSpawn->setUniform("nearPlaneZ", nearPlane.z);
-		programSpawn->setUniform("animationDelta", animationDelta);
-		programSpawn->setUniform("animationTime", animationTime);
-		programSpawn->setUniform("animationAmplitude", animationAmplitude);
-		programSpawn->setUniform("animationFrequency", animationFrequency);
-		programSpawn->setUniform("radiusThreshold", var1);
+		shader->setUniform("modelViewMatrix", modelViewMatrix);
+		shader->setUniform("projectionMatrix", projectionMatrix);
+		shader->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
+		shader->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
+		shader->setUniform("radiusScale", radiusScale * std::powf(0.9f, iteration));
+		shader->setUniform("clipRadiusScale", radiusScale * std::powf(0.9f, iteration));
+		shader->setUniform("nearPlaneZ", nearPlane.z);
+		shader->setUniform("animationDelta", animationDelta);
+		shader->setUniform("animationTime", animationTime);
+		shader->setUniform("animationAmplitude", animationAmplitude);
+		shader->setUniform("animationFrequency", animationFrequency);
+		
+		shader->setUniform("replaceScale", replaceScaleParam);
+		shader->setUniform("LOD", iteration+startLODParam);
+		shader->setUniform("gridScale", gridSize);
+		shader->setUniform("minb", bounds.first);
+		shader->setUniform("maxb", bounds.second);
+
 
 		m_redrawingVAO->bind();
-		programSpawn->use();
+		shader->use();
 		m_redrawingVAO->drawArrays(GL_POINTS, 0, redrawCount);
-		programSpawn->release();
+		shader->release();
 		m_redrawingVAO->unbind();
 
 
 		m_spherePositionTexture->unbindActive(0);
 		m_intersectionBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
 		m_offsetTexture->unbindImageTexture(0);
-		m_redrawPositions[pingpong_index]->unbind(GL_SHADER_STORAGE_BUFFER);
+		currentRedrawIndices->unbind(GL_SHADER_STORAGE_BUFFER);
 		m_redrawCounter->unbind(GL_ATOMIC_COUNTER_BUFFER);
 
 		/// Switch buffers:
@@ -952,18 +1059,19 @@ void SphereRenderer::display()
 			break;
 		
 		redrawCount = newCount;
-		rebindRedrawVAO(m_redrawPositions[pingpong_index]);
+		rebindRedrawVAO(currentRedrawIndices);
 
-		pingpong_index = !pingpong_index;
+		break;
 	}
 
-
+*/
 	m_sphereFramebuffer->unbind();
 	glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Surface intersection pass
 	//////////////////////////////////////////////////////////////////////////
+
 	m_surfaceFramebuffer->bind();
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	glDepthMask(GL_TRUE);
@@ -1009,9 +1117,9 @@ void SphereRenderer::display()
 	programSurface->setUniform("maxb", bounds.second);
 	const auto t = float(glfwGetTime());
 	programSurface->setUniform("time", t);
-	programSurface->setUniform("var1", var1);
-	programSurface->setUniform("var2", var2);
-	programSurface->setUniform("var3", var3);
+	// programSurface->setUniform("var1", var1);
+	// programSurface->setUniform("var2", var2);
+	// programSurface->setUniform("var3", var3);
 
 	m_vaoQuad->bind();
 	programSurface->use();
@@ -1033,7 +1141,6 @@ void SphereRenderer::display()
 	m_elementColorsRadii->unbind(GL_UNIFORM_BUFFER);
 
 	m_surfaceFramebuffer->unbind();
-
 
 	//////////////////////////////////////////////////////////////////////////
 	// Ambient occlusion (optional)
@@ -1278,18 +1385,48 @@ void SphereRenderer::display()
 	// m_offsetTexture->bindImageTexture(0, 0, false, 0, GL_READ_WRITE, GL_R32UI);
 	// m_offsetTexture->bindActive(0);
 
-	// glPatchParameteri(GL_PATCH_VERTICES, 1);
-	// m_vaoQuad->bind();
+	// glClearDepth(1.0f);
+	// glClearColor(0.2, 0.3, 0.5, 1.0f);
+	// glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	// glDisable(GL_DEPTH_TEST);
+
+	
+	// vertexBinding = m_triangleVAO->binding(1);
+	// vertexBinding->setAttribute(1);
+	// vertexBinding->setBuffer(m_sceneGraphBuffer.get(), 0, 2 * sizeof(glm::vec4));
+	// vertexBinding->setFormat(4, GL_UNSIGNED_INT);
+	// m_triangleVAO->enable(1);
+	// vertexBinding = m_triangleVAO->binding(2);
+	// vertexBinding->setAttribute(2);
+	// vertexBinding->setBuffer(m_sceneGraphBuffer.get(), sizeof(glm::uvec4), 2 * sizeof(glm::uvec4));
+	// vertexBinding->setFormat(4, GL_UNSIGNED_INT);
+	// m_triangleVAO->enable(2);
+
+	// glMemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+	// m_triangleVAO->bind();
+	// glBindBuffer(GL_ARRAY_BUFFER, m_sceneGraphBuffer->id());
+	// // glBufferData(GL_ARRAY_BUFFER, gridCount * 2 * sizeof(glm::uvec4), m_sceneGraphBuffer->)
+	// glVertexAttribPointer(0, 4, GL_UNSIGNED_INT, GL_FALSE, 2 * sizeof(glm::uvec4), nullptr);
+	// glEnableVertexAttribArray(0);
+	// glVertexAttribPointer(1, 4, GL_UNSIGNED_INT, GL_FALSE, 2 * sizeof(glm::uvec4), (void*)(sizeof(glm::uvec4)));
+	// glEnableVertexAttribArray(1);
+
+	// // glPatchParameteri(GL_PATCH_VERTICES, 1);
+	// m_triangleVAO->bind();
+	// programTest->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 	// programTest->use();
-	// m_redrawCounter->bindBase(GL_ATOMIC_COUNTER_BUFFER, 4);
-	// m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
+	// // m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
+	// // m_redrawCounter->bindBase(GL_ATOMIC_COUNTER_BUFFER, 4);
+	// glPointSize(10.f);
+	// m_triangleVAO->drawArrays(GL_POINTS, 0, 9);
 	// programTest->release();
-	// m_vaoQuad->unbind();
+	// m_triangleVAO->unbind();
+	// m_sceneGraphBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
 
 	if (viewportSize == viewer()->viewportSize())
 	{
 		// Blit final image into visible framebuffer
-		m_shadeFramebuffer->blit(GL_COLOR_ATTACHMENT0, { 0,0,viewer()->viewportSize().x, viewer()->viewportSize().y }, Framebuffer::defaultFBO().get(), GL_BACK, { 0,0,viewer()->viewportSize().x, viewer()->viewportSize().y }, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+		// m_shadeFramebuffer->blit(GL_COLOR_ATTACHMENT0, { 0,0,viewer()->viewportSize().x, viewer()->viewportSize().y }, Framebuffer::defaultFBO().get(), GL_BACK, { 0,0,viewer()->viewportSize().x, viewer()->viewportSize().y }, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 	}
 	else
 	{

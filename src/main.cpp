@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
 	globjects::DebugMessage::enable();
 
 	// Silence atomic counter performance warnings:
-	globjects::DebugMessage::disableMessage(GL_DEBUG_SOURCE_API, GL_DEBUG_TYPE_PERFORMANCE, GL_DONT_CARE, 0x20072);
+	// globjects::DebugMessage::disableMessage(GL_DEBUG_SOURCE_API, GL_DEBUG_TYPE_PERFORMANCE, GL_DONT_CARE, 0x20072);
 	
 	globjects::debug()
 		<< "OpenGL Version:  " << glbinding::aux::ContextInfo::version() << std::endl

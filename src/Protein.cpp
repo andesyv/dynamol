@@ -240,11 +240,11 @@ void Protein::load(const std::string& filename)
 	}
 
 	// Generate sparse LOD
-	const std::size_t pointCount = 100;
+	const std::size_t pointCount = 1000;
 	m_genAtomsSparse.reserve(pointCount);
 	const auto center = 0.5f * m_minimumBounds + 0.5f * m_maximumBounds;
 	for (std::size_t i{0}; i < atom.size() && m_genAtomsSparse.size() < pointCount; i += atom.size() / pointCount) {
-		const auto r = [offset](){ return ((ran() % 1000 * 0.001) - 0.5) * offset; };
+		const auto r = [offset](){ return ((ran() % 1000 * 0.001) - 0.5) * 100.0; };
 		m_genAtomsSparse.push_back(glm::vec4{center, 0.f} + glm::vec4{r(), r(), r(), atom.at(i).w});
 	}
 }

@@ -13,8 +13,6 @@ uniform float radiusScale;
 uniform float clipRadiusScale;
 uniform float nearPlaneZ = -0.125;
 
-uniform float replaceScale = 0.0;
-
 /** The number of sides in the bounding polygon. Must be even. */
 #define N 4
 
@@ -221,10 +219,22 @@ layout(std140, binding = 0) uniform elementBlock
 layout(binding = 4) uniform atomic_uint redrawCount;
 layout(std430, binding = 4) buffer discardedVertices
 {
-    vec4 redrawPositions[];
+    uint redrawCells[];
 };
 
-uniform float radiusThreshold = 0.0;
+uniform float replaceScale = 0.0;
+uniform uint LOD = 1;
+uniform uint gridScale = 2;
+
+#define BIAS 0.001
+uniform vec3 minb = vec3(0.);
+uniform vec3 maxb = vec3(0.);
+
+uint powi(uint x, uint y) {
+    for (uint j = 1; j < y; ++j)
+        x *= x;
+    return x;
+}
 
 void main()
 {
@@ -244,9 +254,45 @@ void main()
 	float radius = length(size);
 
     // If radius is above a certain threshold, subdivide into smaller LOD in next step:
-    if (radius > radiusThreshold) {
-        uint index = atomicCounterIncrement(redrawCount);
-        redrawPositions[index] = gl_in[0].gl_Position;
+    if (sphereId % 100 < int(replaceScale * 100.0)) {
+        // redrawPositions[index] = gl_in[0].gl_Position;
+        // Find 9 new cells to render next iteration:
+        // 1. Find base offset to current LOD level:
+        uint baseOffset = 0;
+        const uint gridScale3 = gridScale * gridScale * gridScale;
+        uint gridStep = powi(2, LOD);
+        for (uint d = 1; d < LOD; ++d)
+            baseOffset += d * d * d * gridScale3;
+        
+        const vec3 bdir = (maxb - minb + 2.0 * BIAS).xyz / float(gridStep);
+
+        // 2. Calculate current cell index:
+        vec3 dir = c.xyz - minb - BIAS;
+        ivec3 gridIndex = ivec3(floor(dir / bdir));
+        float dist = 1000000.0;
+
+        // 3. Sample all neighbouring cells:
+        for (int z = -1; z < 2; ++z) {
+            for (int y = -1; y < 2; ++y) {
+                for (int x = -1; x < 2; ++x) {
+                    ivec3 offsetGridIndex = ivec3(gridIndex.x + x, gridIndex.y + y, gridIndex.z + z);
+                    // Bounds checking:
+                    if (offsetGridIndex.x < 0 ||
+                        offsetGridIndex.y < 0 ||
+                        offsetGridIndex.z < 0 ||
+                        gridStep < offsetGridIndex.x ||
+                        gridStep < offsetGridIndex.y ||
+                        gridStep < offsetGridIndex.z)
+                            continue;
+                        
+                    uint index = baseOffset + offsetGridIndex.x + offsetGridIndex.y * gridStep + offsetGridIndex.z * gridStep * gridStep;
+                    
+                    // 4. Add index to list of cells to redraw
+                    redrawCells[atomicCounterIncrement(redrawCount)] = index;
+                }
+            }
+        }
+
         return;
     }
 
