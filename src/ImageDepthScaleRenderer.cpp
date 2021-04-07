@@ -120,6 +120,12 @@ ImageDepthScaleRenderer::ImageDepthScaleRenderer(Viewer* viewer) : Renderer(view
 		},
 		{ "./res/model/globals.glsl" });
 
+	createShaderProgram("blend", {
+		{ GL_VERTEX_SHADER, "./res/sphere/image-vs.glsl" },
+		{ GL_GEOMETRY_SHADER, "./res/sphere/image-gs.glsl" },
+		{ GL_FRAGMENT_SHADER, "./res/scaling/imageblend-fs.glsl" },
+	});
+
 	m_framebufferSize = viewer->viewportSize();
 
 	m_depthTexture = Texture::create(GL_TEXTURE_2D);
@@ -310,7 +316,7 @@ ImageDepthScaleRenderer::ImageDepthScaleRenderer(Viewer* viewer) : Renderer(view
 		depth->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		depth->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		depth->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		depth->image2D(0, GL_DEPTH_COMPONENT, m_framebufferSize, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, nullptr);
+		depth->image2D(0, GL_DEPTH_COMPONENT32, m_framebufferSize, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, nullptr);
 		
 		fb = Framebuffer::create();
 		fb->attachTexture(GL_COLOR_ATTACHMENT0, color.get());
@@ -365,6 +371,7 @@ void ImageDepthScaleRenderer::display()
 	auto programDOFBlend = shaderProgram("dofblend");
 	auto programDisplay = shaderProgram("display");
 	auto programShadow = shaderProgram("shadow");
+	auto programBlend = shaderProgram("blend");
 
 	
 	// get cursor position for magic lens
@@ -440,6 +447,8 @@ void ImageDepthScaleRenderer::display()
 	static uint environmentTextureIndex = 0;
 	static uint materialTextureIndex = 0;
 	static uint bumpTextureIndex = 0;
+
+	static float framebufferInterpolation = 0.f;
 
 	// user interface for manipulating rendering parameters
 	if (ImGui::BeginMenu("Renderer"))
@@ -578,6 +587,11 @@ void ImageDepthScaleRenderer::display()
 			ImGui::SliderFloat("Amplitude", &animationAmplitude, 1.0f, 32.0f);
 		}
 
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu("Other Shit")) {
+		ImGui::SliderFloat("Framebuffer interpolation", &framebufferInterpolation, 0.f, 1.f);
 		ImGui::EndMenu();
 	}
 
@@ -886,10 +900,34 @@ void ImageDepthScaleRenderer::display()
 		LODfb->unbind();
 	}
 
+	//////////////////////////////////////////////////////////////////////////
+	// Blend framebuffers
+	//////////////////////////////////////////////////////////////////////////
+	Framebuffer::defaultFBO()->bind();
+	
+	glClearDepth(1.f);
+	glClearColor(0.2f, 0.2f, 0.4f, 1.f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glDisable(GL_DEPTH_TEST);
+
+	m_LODDepthFramebuffer_Depth[0]->bindActive(0);
+	m_LODDepthFramebuffer_Depth[1]->bindActive(1);
+
+	programBlend->setUniform("interpolation", framebufferInterpolation);
+
+	m_vaoQuad->bind();
+	programBlend->use();
+	m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
+	programBlend->release();
+	m_vaoQuad->unbind();
+
+	m_LODDepthFramebuffer_Depth[1]->unbindActive(1);
+	m_LODDepthFramebuffer_Depth[0]->unbindActive(0);
+
 	if (viewportSize == viewer()->viewportSize())
 	{
 		// Blit final image into visible framebuffer
-		m_LODDepthFramebuffer[LODIteration-1]->blit(GL_COLOR_ATTACHMENT0, { 0,0,viewer()->viewportSize().x, viewer()->viewportSize().y }, Framebuffer::defaultFBO().get(), GL_BACK, { 0,0,viewer()->viewportSize().x, viewer()->viewportSize().y }, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+		// m_LODDepthFramebuffer[LODIteration-1]->blit(GL_COLOR_ATTACHMENT0, { 0,0,viewer()->viewportSize().x, viewer()->viewportSize().y }, Framebuffer::defaultFBO().get(), GL_BACK, { 0,0,viewer()->viewportSize().x, viewer()->viewportSize().y }, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 	}
 	else
 	{
