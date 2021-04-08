@@ -247,6 +247,21 @@ void Protein::load(const std::string& filename)
 		const auto r = [offset](){ return ((ran() % 1000 * 0.001) - 0.5) * 100.0; };
 		m_genAtomsSparse.push_back(glm::vec4{center, 0.f} + glm::vec4{r(), r(), r(), atom.at(i).w});
 	}
+
+	// Generate kinda sparse LOD
+	const std::size_t pointCount2 = 1000;
+	m_genAtomsKindaSparse.reserve(pointCount2);
+	glm::vec4 kindaSparseCenter = glm::vec4{0.f};
+	for (std::size_t i{0}; i < atom.size() && m_genAtomsKindaSparse.size() < pointCount2; i += atom.size() / pointCount2) {
+		m_genAtomsKindaSparse.push_back(atom.at(i));
+		kindaSparseCenter += atom.at(i);
+	}
+	// // Gravitate closer together:
+	// kindaSparseCenter /= static_cast<float>(m_genAtomsKindaSparse.size());
+	// for (auto& pos : m_genAtomsKindaSparse) {
+	// 	const auto dir = glm::vec3{kindaSparseCenter - pos};
+	// 	pos = glm::vec4{glm::vec3{pos} - 0.9f * dir, pos.w};
+	// }
 }
 
 const std::string & Protein::filename() const

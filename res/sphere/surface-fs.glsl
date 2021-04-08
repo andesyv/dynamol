@@ -44,7 +44,7 @@ in vec4 gFragmentPosition;
 out vec4 surfacePosition;
 out vec4 surfaceNormal;
 out vec4 surfaceDiffuse;
-out vec4 sphereDiffuse;
+// out vec4 sphereDiffuse;
 
 struct Element
 {
@@ -481,6 +481,6 @@ void main()
 #endif
 
 	surfaceDiffuse = vec4(diffuseColor,1.0);
-	sphereDiffuse = vec4(diffuseSphereColor,1.0);
+	// sphereDiffuse = vec4(diffuseSphereColor,1.0);
 	gl_FragDepth = calcDepth(closestPosition.xyz);
 }

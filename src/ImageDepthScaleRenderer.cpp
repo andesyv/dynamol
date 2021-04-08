@@ -128,12 +128,43 @@ ImageDepthScaleRenderer::ImageDepthScaleRenderer(Viewer* viewer) : Renderer(view
 
 	m_framebufferSize = viewer->viewportSize();
 
-	m_depthTexture = Texture::create(GL_TEXTURE_2D);
-	m_depthTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	m_depthTexture->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	m_depthTexture->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	m_depthTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	m_depthTexture->image2D(0, GL_DEPTH_COMPONENT, m_framebufferSize, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, nullptr);
+	for (auto [fb, surfPos, surfNorm, surfDiffuse, depth] : zip(m_surfaceFramebuffer, m_surfacePositionTexture, m_surfaceNormalTexture, m_surfaceDiffuseTexture, m_depthTexture)) {	
+		surfPos = Texture::create(GL_TEXTURE_2D);
+		surfPos->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		surfPos->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		surfPos->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		surfPos->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		surfPos->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+		surfNorm = Texture::create(GL_TEXTURE_2D);
+		surfNorm->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		surfNorm->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		surfNorm->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		surfNorm->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		surfNorm->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+		surfDiffuse = Texture::create(GL_TEXTURE_2D);
+		surfDiffuse->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		surfDiffuse->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		surfDiffuse->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		surfDiffuse->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		surfDiffuse->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+		depth = Texture::create(GL_TEXTURE_2D);
+		depth->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		depth->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		depth->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		depth->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		depth->image2D(0, GL_DEPTH_COMPONENT32, m_framebufferSize, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, nullptr);
+
+		fb = Framebuffer::create();
+		fb->attachTexture(GL_COLOR_ATTACHMENT0, surfPos.get());
+		fb->attachTexture(GL_COLOR_ATTACHMENT1, surfNorm.get());
+		fb->attachTexture(GL_COLOR_ATTACHMENT2, surfDiffuse.get());
+		// fb->attachTexture(GL_COLOR_ATTACHMENT3, m_sphereDiffuseTexture.get());
+		fb->attachTexture(GL_DEPTH_ATTACHMENT, depth.get());
+		fb->setDrawBuffers({ GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 });
+	}
 
 	m_spherePositionTexture = Texture::create(GL_TEXTURE_2D);
 	m_spherePositionTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -149,33 +180,12 @@ ImageDepthScaleRenderer::ImageDepthScaleRenderer(Viewer* viewer) : Renderer(view
 	m_sphereNormalTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	m_sphereNormalTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
-	m_surfacePositionTexture = Texture::create(GL_TEXTURE_2D);
-	m_surfacePositionTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	m_surfacePositionTexture->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	m_surfacePositionTexture->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	m_surfacePositionTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	m_surfacePositionTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-
-	m_surfaceNormalTexture = Texture::create(GL_TEXTURE_2D);
-	m_surfaceNormalTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	m_surfaceNormalTexture->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	m_surfaceNormalTexture->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	m_surfaceNormalTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	m_surfaceNormalTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-
 	m_sphereDiffuseTexture = Texture::create(GL_TEXTURE_2D);
 	m_sphereDiffuseTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	m_sphereDiffuseTexture->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	m_sphereDiffuseTexture->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	m_sphereDiffuseTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	m_sphereDiffuseTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-
-	m_surfaceDiffuseTexture = Texture::create(GL_TEXTURE_2D);
-	m_surfaceDiffuseTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	m_surfaceDiffuseTexture->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	m_surfaceDiffuseTexture->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	m_surfaceDiffuseTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	m_surfaceDiffuseTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
 	m_ambientTexture = Texture::create(GL_TEXTURE_2D);
 	m_ambientTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -262,21 +272,13 @@ ImageDepthScaleRenderer::ImageDepthScaleRenderer(Viewer* viewer) : Renderer(view
 	m_sphereFramebuffer = Framebuffer::create();
 	m_sphereFramebuffer->attachTexture(GL_COLOR_ATTACHMENT0, m_spherePositionTexture.get());
 	m_sphereFramebuffer->attachTexture(GL_COLOR_ATTACHMENT1, m_sphereNormalTexture.get());
-	m_sphereFramebuffer->attachTexture(GL_DEPTH_ATTACHMENT, m_depthTexture.get());
+	m_sphereFramebuffer->attachTexture(GL_DEPTH_ATTACHMENT, m_depthTexture[0].get());
 	m_sphereFramebuffer->setDrawBuffers({ GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 });
-
-	m_surfaceFramebuffer = Framebuffer::create();
-	m_surfaceFramebuffer->attachTexture(GL_COLOR_ATTACHMENT0, m_surfacePositionTexture.get());
-	m_surfaceFramebuffer->attachTexture(GL_COLOR_ATTACHMENT1, m_surfaceNormalTexture.get());
-	m_surfaceFramebuffer->attachTexture(GL_COLOR_ATTACHMENT2, m_surfaceDiffuseTexture.get());
-	m_surfaceFramebuffer->attachTexture(GL_COLOR_ATTACHMENT3, m_sphereDiffuseTexture.get());
-	m_surfaceFramebuffer->attachTexture(GL_DEPTH_ATTACHMENT, m_depthTexture.get());
-	m_surfaceFramebuffer->setDrawBuffers({ GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3 });
 
 	m_shadeFramebuffer = Framebuffer::create();
 	m_shadeFramebuffer->attachTexture(GL_COLOR_ATTACHMENT0, m_colorTexture.get());
 	m_shadeFramebuffer->setDrawBuffers({ GL_COLOR_ATTACHMENT0 });
-	m_shadeFramebuffer->attachTexture(GL_DEPTH_ATTACHMENT, m_depthTexture.get());
+	m_shadeFramebuffer->attachTexture(GL_DEPTH_ATTACHMENT, m_depthTexture[0].get());
 
 	m_aoBlurFramebuffer = Framebuffer::create();
 	m_aoBlurFramebuffer->attachTexture(GL_COLOR_ATTACHMENT0, m_blurTexture.get());
@@ -285,16 +287,6 @@ ImageDepthScaleRenderer::ImageDepthScaleRenderer(Viewer* viewer) : Renderer(view
 	m_aoFramebuffer = Framebuffer::create();
 	m_aoFramebuffer->attachTexture(GL_COLOR_ATTACHMENT0, m_ambientTexture.get());
 	m_aoFramebuffer->setDrawBuffers({ GL_COLOR_ATTACHMENT0 });
-
-	m_dofBlurFramebuffer = Framebuffer::create();
-	m_dofBlurFramebuffer->attachTexture(GL_COLOR_ATTACHMENT0, m_sphereNormalTexture.get());
-	m_dofBlurFramebuffer->attachTexture(GL_COLOR_ATTACHMENT1, m_surfaceNormalTexture.get());
-	m_dofBlurFramebuffer->setDrawBuffers({ GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 });
-
-	m_dofFramebuffer = Framebuffer::create();
-	m_dofFramebuffer->attachTexture(GL_COLOR_ATTACHMENT0, m_sphereDiffuseTexture.get());
-	m_dofFramebuffer->attachTexture(GL_COLOR_ATTACHMENT1, m_surfaceDiffuseTexture.get());
-	m_dofFramebuffer->setDrawBuffers({ GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 });
 	
 	m_shadowFramebuffer = Framebuffer::create();
 	m_shadowFramebuffer->attachTexture(GL_COLOR_ATTACHMENT0, m_shadowColorTexture.get());
@@ -326,8 +318,8 @@ ImageDepthScaleRenderer::ImageDepthScaleRenderer(Viewer* viewer) : Renderer(view
 
 	// Sparse points:
 	m_sparseAtomVertices = Buffer::create();
-	m_sparseAtomVertices->setStorage(viewer->scene()->protein()->m_genAtomsSparse, gl::GL_NONE_BIT);
-	m_sparseVertexCount = static_cast<gl::GLsizei>(viewer->scene()->protein()->m_genAtomsSparse.size());
+	m_sparseAtomVertices->setStorage(viewer->scene()->protein()->m_genAtomsKindaSparse, gl::GL_NONE_BIT);
+	m_sparseVertexCount = static_cast<gl::GLsizei>(viewer->scene()->protein()->m_genAtomsKindaSparse.size());
 }
 
 void ImageDepthScaleRenderer::display()
@@ -347,12 +339,14 @@ void ImageDepthScaleRenderer::display()
 	{
 		m_framebufferSize = viewportSize;
 		m_offsetTexture->image2D(0, GL_R32UI, m_framebufferSize, 0, GL_RED_INTEGER, GL_UNSIGNED_BYTE, nullptr);
-		m_depthTexture->image2D(0, GL_DEPTH_COMPONENT, m_framebufferSize, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, nullptr);
 		m_spherePositionTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 		m_sphereNormalTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-		m_surfacePositionTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-		m_surfaceNormalTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-		m_surfaceDiffuseTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+		for (auto [surfPos, surfNorm, surfDiffuse, depth] : zip(m_surfacePositionTexture, m_surfaceNormalTexture, m_surfaceDiffuseTexture, m_depthTexture)) {
+			surfPos->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+			surfNorm->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+			surfDiffuse->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+			depth->image2D(0, GL_DEPTH_COMPONENT32, m_framebufferSize, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, nullptr);
+		}
 		m_sphereDiffuseTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 		m_ambientTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 		m_blurTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
@@ -449,6 +443,7 @@ void ImageDepthScaleRenderer::display()
 	static uint bumpTextureIndex = 0;
 
 	static float framebufferInterpolation = 0.f;
+	static float smoothParam = 0.f;
 
 	// user interface for manipulating rendering parameters
 	if (ImGui::BeginMenu("Renderer"))
@@ -592,6 +587,7 @@ void ImageDepthScaleRenderer::display()
 
 	if (ImGui::BeginMenu("Other Shit")) {
 		ImGui::SliderFloat("Framebuffer interpolation", &framebufferInterpolation, 0.f, 1.f);
+		ImGui::DragFloat("Smoothness", &smoothParam, 0.01f, 0.f, 100.f);
 		ImGui::EndMenu();
 	}
 
@@ -673,6 +669,8 @@ void ImageDepthScaleRenderer::display()
 		// Sphere rendering pass
 		//////////////////////////////////////////////////////////////////////////
 		m_sphereFramebuffer->bind();
+		m_sphereFramebuffer->attachTexture(GL_DEPTH_ATTACHMENT, m_depthTexture[LODIteration].get());
+
 		glClearDepth(1.0f);
 		glClearColor(0.0, 0.0, 0.0, 65535.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -684,8 +682,8 @@ void ImageDepthScaleRenderer::display()
 		programSphere->setUniform("projectionMatrix", projectionMatrix);
 		programSphere->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 		programSphere->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
-		programSphere->setUniform("radiusScale", 1.0f);
-		programSphere->setUniform("clipRadiusScale", radiusScale);
+		programSphere->setUniform("radiusScale", 1.0f * (2 - LODIteration));
+		programSphere->setUniform("clipRadiusScale", radiusScale * (2 - LODIteration));
 		programSphere->setUniform("nearPlaneZ", nearPlane.z);
 		programSphere->setUniform("animationDelta", animationDelta);
 		programSphere->setUniform("animationTime", animationTime);
@@ -723,8 +721,8 @@ void ImageDepthScaleRenderer::display()
 		programSpawn->setUniform("projectionMatrix", projectionMatrix);
 		programSpawn->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 		programSpawn->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
-		programSpawn->setUniform("radiusScale", radiusScale);
-		programSpawn->setUniform("clipRadiusScale", radiusScale);
+		programSpawn->setUniform("radiusScale", radiusScale * (2 - LODIteration));
+		programSpawn->setUniform("clipRadiusScale", radiusScale * (2 - LODIteration));
 		programSpawn->setUniform("nearPlaneZ", nearPlane.z);
 		programSpawn->setUniform("animationDelta", animationDelta);
 		programSpawn->setUniform("animationTime", animationTime);
@@ -748,7 +746,8 @@ void ImageDepthScaleRenderer::display()
 		//////////////////////////////////////////////////////////////////////////
 		// Surface intersection pass
 		//////////////////////////////////////////////////////////////////////////
-		m_surfaceFramebuffer->bind();
+		auto& surfaceFB = m_surfaceFramebuffer[LODIteration];
+		surfaceFB->bind();
 		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 		glDepthMask(GL_TRUE);
 
@@ -806,10 +805,10 @@ void ImageDepthScaleRenderer::display()
 		m_residueColors->unbind(GL_UNIFORM_BUFFER);
 		m_elementColorsRadii->unbind(GL_UNIFORM_BUFFER);
 
-		m_surfaceFramebuffer->unbind();
+		surfaceFB->unbind();
 
 
-
+/*
 		//////////////////////////////////////////////////////////////////////////
 		// Shading
 		//////////////////////////////////////////////////////////////////////////
@@ -898,6 +897,7 @@ void ImageDepthScaleRenderer::display()
 		m_spherePositionTexture->unbindActive(0);
 
 		LODfb->unbind();
+*/
 	}
 
 	//////////////////////////////////////////////////////////////////////////
@@ -910,10 +910,19 @@ void ImageDepthScaleRenderer::display()
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glDisable(GL_DEPTH_TEST);
 
-	m_LODDepthFramebuffer_Depth[0]->bindActive(0);
-	m_LODDepthFramebuffer_Depth[1]->bindActive(1);
+	m_depthTexture[0]->bindActive(0);
+	m_depthTexture[1]->bindActive(1);
+	m_surfacePositionTexture[0]->bindActive(2);
+	m_surfacePositionTexture[1]->bindActive(3);
+	m_surfaceNormalTexture[0]->bindActive(4);
+	m_surfaceNormalTexture[1]->bindActive(5);
+	m_surfaceDiffuseTexture[0]->bindActive(6);
+	m_surfaceDiffuseTexture[1]->bindActive(7);
 
 	programBlend->setUniform("interpolation", framebufferInterpolation);
+	programBlend->setUniform("smoothness", smoothParam);
+	programBlend->setUniform("lightPosition", vec3(worldLightPosition));
+	programBlend->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 
 	m_vaoQuad->bind();
 	programBlend->use();
@@ -921,14 +930,21 @@ void ImageDepthScaleRenderer::display()
 	programBlend->release();
 	m_vaoQuad->unbind();
 
-	m_LODDepthFramebuffer_Depth[1]->unbindActive(1);
-	m_LODDepthFramebuffer_Depth[0]->unbindActive(0);
+	m_surfaceDiffuseTexture[1]->unbindActive(7);
+	m_surfaceDiffuseTexture[0]->unbindActive(6);
+	m_surfaceNormalTexture[1]->unbindActive(5);
+	m_surfaceNormalTexture[0]->unbindActive(4);
+	m_surfacePositionTexture[0]->unbindActive(3);
+	m_surfacePositionTexture[1]->unbindActive(2);
+	m_depthTexture[1]->unbindActive(1);
+	m_depthTexture[0]->unbindActive(0);
 
 	if (viewportSize == viewer()->viewportSize())
 	{
 		// Blit final image into visible framebuffer
 		// m_LODDepthFramebuffer[LODIteration-1]->blit(GL_COLOR_ATTACHMENT0, { 0,0,viewer()->viewportSize().x, viewer()->viewportSize().y }, Framebuffer::defaultFBO().get(), GL_BACK, { 0,0,viewer()->viewportSize().x, viewer()->viewportSize().y }, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 	}
+/*
 	else
 	{
 		m_colorTexture->bindActive(0);
@@ -948,8 +964,8 @@ void ImageDepthScaleRenderer::display()
 
 		m_depthTexture->unbindActive(1);
 		m_colorTexture->unbindActive(0);
-
 	}
+*/
 
 	// Restore OpenGL state
 	currentState->apply();
