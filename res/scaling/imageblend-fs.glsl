@@ -38,7 +38,8 @@ float smin( float a, float b, float k )
 }
 
 float scrDepth(vec2 fragCoord) {
-    return smin(texture(LOD0Depth, fragCoord).r, texture(LOD1Depth, fragCoord).r, interpolation);
+    // return smin(texture(LOD0Depth, fragCoord).r, texture(LOD1Depth, fragCoord).r, interpolation);
+    return mix(texture(LOD0Depth, fragCoord).r, texture(LOD1Depth, fragCoord).r, interpolation);
 }
 
 float linearizeDepth(vec3 pos)
@@ -50,9 +51,9 @@ float linearizeDepth(vec3 pos)
 	return (((far - near) * ndc_depth) + near + far) / 2.0;
 }
 
-float gradient(vec2 fragPos) {
+// float gradient(vec2 fragPos) {
     
-}
+// }
 
 void main() {
     vec2 uv = gFragmentPosition.xy * 0.5 + 0.5;
@@ -90,9 +91,12 @@ void main() {
 
     // fragColor = vec4(vec3(mix(d0, d1, 0.5)), 1.0);
 
-    float du = dFdx(min(d0, d1));
-    float dv = dFdy(min(d0, d1));
+
+    // float du = dFdx(min(d0, d1));
+    // float dv = dFdy(min(d0, d1));
     
-    float depth = smin(d0, d1, smoothness);
-    fragColor = vec4(vec3(depth), 1.0);
+    // float depth = smin(d0, d1, max(smoothness, 0.01));
+    // fragColor = vec4(vec3(depth), 1.0);
+    
+    fragColor = vec4(vec3(scrDepth(uv) + 0.5 * dFdx(scrDepth(uv)) + 0.5 * dFdy(scrDepth(uv))), 1.0);
 }
