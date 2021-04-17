@@ -819,11 +819,12 @@ void SphereRenderer::display()
 	const unsigned long long gridCount = (pow(8, gridDepth + 1) - 8) / 7;
 	// std::vector<std::pair<glm::uvec4, glm::uvec4>> emptyBuffer{};
 	// emptyBuffer.resize(gridCount, {});
-	m_sceneGraphBuffer->clearSubData(GL_RGBA32UI, 0, 2 * sizeof(glm::uvec4) * gridCount, GL_RGBA, GL_UNSIGNED_INT, nullptr);
-	m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
+	// m_sceneGraphBuffer->clearSubData(GL_RGBA32UI, 0, 2 * sizeof(glm::uvec4) * gridCount, GL_RGBA, GL_UNSIGNED_INT, nullptr);
+	// m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
 
 	const std::pair bounds{viewer()->scene()->protein()->minimumBounds(), viewer()->scene()->protein()->maximumBounds()};
 
+	/*
 	programGrid->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 	programGrid->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
 	programGrid->setUniform("gridScale", gridSize);
@@ -840,7 +841,9 @@ void SphereRenderer::display()
 	m_sparseVAO->unbind();
 
 	m_sceneGraphBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
+	*/
 
+	/*
 	//////////////////////////////////////////////////////////////////////////
 	// Grid start points generation
 	//////////////////////////////////////////////////////////////////////////
@@ -886,105 +889,39 @@ void SphereRenderer::display()
 		m_initialGridPoints->unbind(GL_SHADER_STORAGE_BUFFER);
 	}
 
-
-	//////////////////////////////////////////////////////////////////////////
-	// Shadow rendering pass
-	//////////////////////////////////////////////////////////////////////////
-	// experimental ground place shadow (disabled for now)
-	/*
-	glViewport(0, 0, m_shadowMapSize.x, m_shadowMapSize.y);
-
-	m_shadowFramebuffer->bind();
-	glClearDepth(1.0f);
-	glClearColor(0.0, 0.0, 0.0, 65535.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_ONE, GL_ONE);
-	glBlendEquation(GL_MAX);
-	//glBlendEquation(GL_FUNC_ADD);
-	
-	glEnable(GL_DEPTH_TEST);
-//	glDepthFunc(GL_LESS);
-	glDepthFunc(GL_ALWAYS);
-
-	programShadow->setUniform("modelViewMatrix", modelLightMatrix);
-	programShadow->setUniform("projectionMatrix", projectionMatrix);
-	programShadow->setUniform("modelViewProjectionMatrix", modelLightProjectionMatrix);
-	programShadow->setUniform("inverseModelViewProjectionMatrix", inverseModelLightProjectionMatrix);
-	programShadow->setUniform("radiusScale", 2.0f*radiusScale);
-	programShadow->setUniform("clipRadiusScale", radiusScale);
-	programShadow->setUniform("nearPlaneZ", nearPlane.z);
-	programShadow->setUniform("animationDelta", animationDelta);
-	programShadow->setUniform("animationTime", animationTime);
-	programShadow->setUniform("animationAmplitude", animationAmplitude);
-	programShadow->setUniform("animationFrequency", animationFrequency);
-
-	m_vao->bind();
-	programShadow->use();
-	m_vao->drawArrays(GL_POINTS, 0, vertexCount);
-	programShadow->release();
-	m_vao->unbind();
-	m_shadowFramebuffer->unbind();
-
-	glDisable(GL_BLEND);
-	glBlendEquation(GL_FUNC_ADD);
-
-	glViewport(0, 0, viewportSize.x, viewportSize.y);
 	*/
+
 	//////////////////////////////////////////////////////////////////////////
 	// Sphere rendering pass
 	//////////////////////////////////////////////////////////////////////////
 	m_sphereFramebuffer->bind();
+	glClearDepth(1.0f);
+	glClearColor(0.0, 0.0, 0.0, 65535.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	// glEnable(GL_DEPTH_TEST);
-	// glDepthFunc(GL_LESS);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
 
-	// programSphere->setUniform("modelViewMatrix", modelViewMatrix);
-	// programSphere->setUniform("projectionMatrix", projectionMatrix);
-	// programSphere->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
-	// programSphere->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
-	// programSphere->setUniform("radiusScale", 1.0f);
-	// programSphere->setUniform("clipRadiusScale", radiusScale);
-	// programSphere->setUniform("nearPlaneZ", nearPlane.z);
-	// programSphere->setUniform("animationDelta", animationDelta);
-	// programSphere->setUniform("animationTime", animationTime);
-	// programSphere->setUniform("animationAmplitude", animationAmplitude);
-	// programSphere->setUniform("animationFrequency", animationFrequency);
+	programSphere->setUniform("modelViewMatrix", modelViewMatrix);
+	programSphere->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
+	programSphere->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
+	programSphere->setUniform("radiusScale", 1.0f);
+	programSphere->setUniform("clipRadiusScale", radiusScale);
+	programSphere->setUniform("nearPlaneZ", nearPlane.z);
+	programSphere->setUniform("animationDelta", animationDelta);
+	programSphere->setUniform("animationTime", animationTime);
+	programSphere->setUniform("animationAmplitude", animationAmplitude);
+	programSphere->setUniform("animationFrequency", animationFrequency);
 
-	// m_sparseVAO->bind();
-	// programSphere->use();
-	// m_sparseVAO->drawArrays(GL_POINTS, 0, m_sparseVertexCount);
-	// programSphere->release();
-	// m_sparseVAO->unbind();
+	m_vao->bind();
+	programSphere->use();
+	m_vao->drawArrays(GL_POINTS, 0, vertexCount);
+	programSphere->release();
+	m_vao->unbind();
 
 	//////////////////////////////////////////////////////////////////////////
 	// List generation pass
 	//////////////////////////////////////////////////////////////////////////
-/*
-	GLuint redrawCount = m_sparseVertexCount;
-
-	const auto rebindRedrawVAO = [&](const auto& buffer){
-		auto binding = m_redrawingVAO->binding(0);
-		binding->setAttribute(0);
-		binding->setBuffer(buffer.get(), 0, sizeof(GLuint));
-		binding->setFormat(1, GL_UNSIGNED_INT);
-		m_redrawingVAO->enable(0);
-	};
-
-
-	// Bind vao to start buffer (vec4):
-	auto binding = m_redrawingVAO->binding(0);
-	binding->setAttribute(0);
-	// Add memory barrier to make sure previous step completed.
-	glMemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
-	binding->setBuffer(m_initialGridPoints.get(), 0, sizeof(glm::vec4));
-	binding->setFormat(4, GL_FLOAT);
-	m_redrawingVAO->enable(0);
-
-	for (auto& indices : m_redrawIndices)
-		indices->clearSubData(GL_R32UI, 0, sizeof(GLuint) * m_sparseVertexCount * 9, GL_RED_INTEGER, GL_UNSIGNED_INT, nullptr);
-
 	const uint intersectionClearValue = 1;
 	m_intersectionBuffer->clearSubData(GL_R32UI, 0, sizeof(uint), GL_RED_INTEGER, GL_UNSIGNED_INT, &intersectionClearValue);
 
@@ -997,74 +934,35 @@ void SphereRenderer::display()
 	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 	glDepthMask(GL_FALSE);
 
+	m_spherePositionTexture->bindActive(0);
+	m_offsetTexture->bindImageTexture(0, 0, false, 0, GL_READ_WRITE, GL_R32UI);
+	m_elementColorsRadii->bindBase(GL_UNIFORM_BUFFER, 0);
+	m_residueColors->bindBase(GL_UNIFORM_BUFFER, 1);
+	m_chainColors->bindBase(GL_UNIFORM_BUFFER, 2);
 
-	for (unsigned int iteration{1}, pingpong_index{0}; iteration < gridDepth - 1 && redrawCount != 0; ++iteration, pingpong_index = !pingpong_index) {
-		const bool bFirstIteration = iteration == 1;
-		auto& shader = bFirstIteration ? programSpawn : programSpawnIteration;
+	programSpawn->setUniform("modelViewMatrix", modelViewMatrix);
+	programSpawn->setUniform("projectionMatrix", projectionMatrix);
+	programSpawn->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
+	programSpawn->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
+	programSpawn->setUniform("radiusScale", radiusScale);
+	programSpawn->setUniform("clipRadiusScale", radiusScale);
+	programSpawn->setUniform("nearPlaneZ", nearPlane.z);
+	programSpawn->setUniform("animationDelta", animationDelta);
+	programSpawn->setUniform("animationTime", animationTime);
+	programSpawn->setUniform("animationAmplitude", animationAmplitude);
+	programSpawn->setUniform("animationFrequency", animationFrequency);
 
-		auto& currentRedrawIndices = m_redrawIndices[pingpong_index];
-
-		// Clear buffers:
-		m_redrawCounter->clearData(GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, nullptr);
-		currentRedrawIndices->clearSubData(GL_R32UI, 0, sizeof(GLuint) * m_sparseVertexCount * 9, GL_RED_INTEGER, GL_UNSIGNED_INT, nullptr);
-
-		m_spherePositionTexture->bindActive(0);
-		m_offsetTexture->bindImageTexture(0, 0, false, 0, GL_READ_WRITE, GL_R32UI);
-		m_elementColorsRadii->bindBase(GL_UNIFORM_BUFFER, 0);
-		m_residueColors->bindBase(GL_UNIFORM_BUFFER, 1);
-		m_chainColors->bindBase(GL_UNIFORM_BUFFER, 2);
-		m_redrawCounter->bindBase(GL_ATOMIC_COUNTER_BUFFER, 4);
-		currentRedrawIndices->bindBase(GL_SHADER_STORAGE_BUFFER, 4);
-
-		shader->setUniform("modelViewMatrix", modelViewMatrix);
-		shader->setUniform("projectionMatrix", projectionMatrix);
-		shader->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
-		shader->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
-		shader->setUniform("radiusScale", radiusScale * std::powf(0.9f, iteration));
-		shader->setUniform("clipRadiusScale", radiusScale * std::powf(0.9f, iteration));
-		shader->setUniform("nearPlaneZ", nearPlane.z);
-		shader->setUniform("animationDelta", animationDelta);
-		shader->setUniform("animationTime", animationTime);
-		shader->setUniform("animationAmplitude", animationAmplitude);
-		shader->setUniform("animationFrequency", animationFrequency);
-		
-		shader->setUniform("replaceScale", replaceScaleParam);
-		shader->setUniform("LOD", iteration+startLODParam);
-		shader->setUniform("gridScale", gridSize);
-		shader->setUniform("minb", bounds.first);
-		shader->setUniform("maxb", bounds.second);
+	m_vao->bind();
+	programSpawn->use();
+	m_vao->drawArrays(GL_POINTS, 0, vertexCount);
+	programSpawn->release();
+	m_vao->unbind();
 
 
-		m_redrawingVAO->bind();
-		shader->use();
-		m_redrawingVAO->drawArrays(GL_POINTS, 0, redrawCount);
-		shader->release();
-		m_redrawingVAO->unbind();
+	m_spherePositionTexture->unbindActive(0);
+	m_intersectionBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
+	m_offsetTexture->unbindImageTexture(0);
 
-
-		m_spherePositionTexture->unbindActive(0);
-		m_intersectionBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
-		m_offsetTexture->unbindImageTexture(0);
-		currentRedrawIndices->unbind(GL_SHADER_STORAGE_BUFFER);
-		m_redrawCounter->unbind(GL_ATOMIC_COUNTER_BUFFER);
-
-		/// Switch buffers:
-
-		// Memory barrier to ensure synchronization of values from shader.
-		glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
-		// Note: Expensive data fetch
-		const auto newCount = m_redrawCounter->getSubData<GLuint, 1>()[0];
-		// If we for some reason didn't change how many points we need to render, skip to prevent infinite loops:
-		if (redrawCount == newCount)
-			break;
-		
-		redrawCount = newCount;
-		rebindRedrawVAO(currentRedrawIndices);
-
-		break;
-	}
-
-*/
 	m_sphereFramebuffer->unbind();
 	glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
@@ -1141,73 +1039,6 @@ void SphereRenderer::display()
 	m_elementColorsRadii->unbind(GL_UNIFORM_BUFFER);
 
 	m_surfaceFramebuffer->unbind();
-
-	//////////////////////////////////////////////////////////////////////////
-	// Ambient occlusion (optional)
-	//////////////////////////////////////////////////////////////////////////
-	if (ambientOcclusion)
-	{
-		//////////////////////////////////////////////////////////////////////////
-		// Ambient occlusion sampling
-		//////////////////////////////////////////////////////////////////////////
-		m_aoFramebuffer->bind();
-
-		programAOSample->setUniform("projectionInfo", projectionInfo);
-		programAOSample->setUniform("projectionScale", projectionScale);
-		programAOSample->setUniform("viewLightPosition", viewLightPosition);
-		programAOSample->setUniform("surfaceNormalTexture", 0);
-
-		m_surfaceNormalTexture->bindActive(0);
-
-		m_vaoQuad->bind();
-		programAOSample->use();
-		m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
-		programAOSample->release();
-		m_vaoQuad->unbind();
-
-		m_aoFramebuffer->unbind();
-
-
-		//////////////////////////////////////////////////////////////////////////
-		// Ambient occlusion blurring -- horizontal
-		//////////////////////////////////////////////////////////////////////////
-		m_aoBlurFramebuffer->bind();
-		programAOBlur->setUniform("normalTexture", 0);
-		programAOBlur->setUniform("ambientTexture", 1);
-		programAOBlur->setUniform("offset", vec2(1.0f / float(viewportSize.x), 0.0f));
-
-		m_ambientTexture->bindActive(1);
-
-		m_vaoQuad->bind();
-		programAOBlur->use();
-		m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
-		programAOBlur->release();
-		m_vaoQuad->unbind();
-
-		m_ambientTexture->unbindActive(1);
-		m_aoBlurFramebuffer->unbind();
-
-
-		//////////////////////////////////////////////////////////////////////////
-		// Ambient occlusion blurring -- vertical
-		//////////////////////////////////////////////////////////////////////////
-		m_aoFramebuffer->bind();
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		programAOBlur->setUniform("offset", vec2(0.0f, 1.0f / float(viewportSize.y)));
-
-		m_blurTexture->bindActive(1);
-
-		m_vaoQuad->bind();
-		programAOBlur->use();
-		m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
-		programAOBlur->release();
-		m_vaoQuad->unbind();
-
-		m_blurTexture->unbindActive(1);
-		m_surfaceNormalTexture->unbindActive(0);
-
-		m_aoFramebuffer->unbind();
-	}
 
 	//////////////////////////////////////////////////////////////////////////
 	// Shading
@@ -1292,93 +1123,6 @@ void SphereRenderer::display()
 	m_shadeFramebuffer->unbind();
 
 
-	//////////////////////////////////////////////////////////////////////////
-	// Depth of field (optional)
-	//////////////////////////////////////////////////////////////////////////
-	if (depthOfField)
-	{
-		//////////////////////////////////////////////////////////////////////////
-		// Depth of field blurring -- horizontal
-		//////////////////////////////////////////////////////////////////////////
-		m_dofBlurFramebuffer->bind();
-
-		m_colorTexture->bindActive(0);
-		m_colorTexture->bindActive(1);
-
-		programDOFBlur->setUniform("maximumCoCRadius", maximumCoCRadius);
-		programDOFBlur->setUniform("aparture", aparture);
-		programDOFBlur->setUniform("focalDistance", focalDistance);
-		programDOFBlur->setUniform("focalLength", focalLength);
-
-		programDOFBlur->setUniform("uMaxCoCRadiusPixels", (int)round(maximumCoCRadius));
-		programDOFBlur->setUniform("uNearBlurRadiusPixels", (int)round(maximumCoCRadius));
-		programDOFBlur->setUniform("uInvNearBlurRadiusPixels", 1.0f / maximumCoCRadius);
-		programDOFBlur->setUniform("horizontal", true);
-		programDOFBlur->setUniform("nearTexture", 0);
-		programDOFBlur->setUniform("blurTexture", 1);
-
-		m_vaoQuad->bind();
-		programDOFBlur->use();
-		m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
-		programDOFBlur->release();
-		m_vaoQuad->unbind();
-
-		m_colorTexture->unbindActive(1);
-		m_colorTexture->unbindActive(0);
-		m_dofBlurFramebuffer->unbind();
-
-
-		//////////////////////////////////////////////////////////////////////////
-		// Depth of field blurring -- vertical
-		//////////////////////////////////////////////////////////////////////////
-		m_dofFramebuffer->bind();
-
-		m_sphereNormalTexture->bindActive(0);
-		m_surfaceNormalTexture->bindActive(1);
-		programDOFBlur->setUniform("horizontal", false);
-		programDOFBlur->setUniform("nearTexture", 0);
-		programDOFBlur->setUniform("blurTexture", 1);
-
-		m_vaoQuad->bind();
-		programDOFBlur->use();
-		m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
-		programDOFBlur->release();
-		m_vaoQuad->unbind();
-
-		m_surfaceNormalTexture->unbindActive(1);
-		m_sphereNormalTexture->unbindActive(0);
-
-		m_dofFramebuffer->unbind();
-
-
-		//////////////////////////////////////////////////////////////////////////
-		// Depth of field blending
-		//////////////////////////////////////////////////////////////////////////
-		m_shadeFramebuffer->bind();
-
-		m_colorTexture->bindActive(0);
-		m_sphereDiffuseTexture->bindActive(1);
-		m_surfaceDiffuseTexture->bindActive(2);
-
-		programDOFBlend->setUniform("maximumCoCRadius", maximumCoCRadius);
-		programDOFBlend->setUniform("aparture", aparture);
-		programDOFBlend->setUniform("focalDistance", focalDistance);
-		programDOFBlend->setUniform("focalLength", focalLength);
-
-		programDOFBlend->setUniform("colorTexture", 0);
-		programDOFBlend->setUniform("nearTexture", 1);
-		programDOFBlend->setUniform("blurTexture", 2);
-
-		m_vaoQuad->bind();
-		programDOFBlend->use();
-		m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
-		programDOFBlend->release();
-		m_vaoQuad->unbind();
-
-		m_surfaceDiffuseTexture->unbindActive(1);
-		m_sphereDiffuseTexture->unbindActive(0);
-		m_shadeFramebuffer->unbind();
-	}
 
 	// Draw test square
 
@@ -1426,7 +1170,7 @@ void SphereRenderer::display()
 	if (viewportSize == viewer()->viewportSize())
 	{
 		// Blit final image into visible framebuffer
-		// m_shadeFramebuffer->blit(GL_COLOR_ATTACHMENT0, { 0,0,viewer()->viewportSize().x, viewer()->viewportSize().y }, Framebuffer::defaultFBO().get(), GL_BACK, { 0,0,viewer()->viewportSize().x, viewer()->viewportSize().y }, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+		m_shadeFramebuffer->blit(GL_COLOR_ATTACHMENT0, { 0,0,viewer()->viewportSize().x, viewer()->viewportSize().y }, Framebuffer::defaultFBO().get(), GL_BACK, { 0,0,viewer()->viewportSize().x, viewer()->viewportSize().y }, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 	}
 	else
 	{
