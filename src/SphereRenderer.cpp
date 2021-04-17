@@ -83,7 +83,7 @@ std::unique_ptr<Texture> SphereRenderer::loadTexture(const std::string& filename
 	return std::unique_ptr<Texture>();
 }
 
-SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer)
+SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, gridDepth{8}
 {
 	Shader::hintIncludeImplementation(Shader::IncludeImplementation::Fallback);
 
@@ -388,7 +388,7 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer)
 	const unsigned long long gridCount = (pow(8, gridDepth + 1) - 8) / 7;
 	std::cout << "Buffer size: " << gridCount * (sizeof(glm::uvec4) + sizeof(glm::uvec4)) << std::endl;
 	m_sceneGraphBuffer->setData(
-		(sizeof(glm::uvec4) + sizeof(glm::uvec4)) * gridCount,
+		2 * sizeof(glm::uvec4) * gridCount,
 		nullptr, gl::GL_DYNAMIC_COPY);
 	m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
 

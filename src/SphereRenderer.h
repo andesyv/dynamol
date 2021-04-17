@@ -88,8 +88,8 @@ namespace dynamol
 		std::unique_ptr<globjects::VertexArray> m_gridVAO = std::make_unique<globjects::VertexArray>();
 		std::unique_ptr<globjects::VertexArray> m_sparseVAO, m_triangleVAO, m_redrawingVAO, m_gridToPointVAO;
 		gl::GLsizei m_denseVertexCount{0}, m_sparseVertexCount{0};
-		const glm::uint gridSize = 2;
-		const glm::uint gridDepth = 9;
+		const glm::uint gridSize;
+		const glm::uint gridDepth;
 
 		std::unique_ptr<globjects::Buffer> m_redrawCounter, m_initialGridPoints;
 		std::array<std::unique_ptr<globjects::Buffer>, 2> m_redrawIndices;
