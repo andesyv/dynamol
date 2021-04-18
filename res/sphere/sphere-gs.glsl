@@ -10,6 +10,7 @@
 uniform mat4 modelViewMatrix;
 uniform mat4 projectionMatrix;
 uniform float radiusScale;
+uniform float outerRadius = 1.7;
 uniform float clipRadiusScale;
 uniform float nearPlaneZ = -0.125;
 
@@ -26,6 +27,7 @@ layout(triangle_strip, max_vertices = N) out;
 out vec4 gFragmentPosition;
 flat out vec4 gSpherePosition;
 flat out float gSphereRadius;
+flat out float gOuterRadius;
 flat out uint gSphereId;
 
 /** 2D-line from point and direction */
@@ -247,6 +249,7 @@ void main()
 	gSphereId = sphereId;
 	gSpherePosition = gl_in[0].gl_Position;
 	gSphereRadius = sphereRadius;
+    gOuterRadius = outerRadius;
 
 	vec4 c = modelViewMatrix * vec4(gl_in[0].gl_Position.xyz,1.0);
 	

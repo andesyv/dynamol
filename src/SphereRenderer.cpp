@@ -97,6 +97,7 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 	m_residueColors->setStorage(viewer->scene()->protein()->activeResidueColorsPacked(), gl::GL_NONE_BIT);
 	m_chainColors->setStorage(viewer->scene()->protein()->activeChainColorsPacked(), gl::GL_NONE_BIT);
 
+	// Note: 1024 * 1024 * 128 seems like a very arbitrary number
 	m_intersectionBuffer->setStorage(sizeof(vec3) * 1024 * 1024 * 128 + sizeof(uint), nullptr, gl::GL_NONE_BIT);
 
 	m_verticesQuad->setStorage(std::array<vec3, 1>({ vec3(0.0f, 0.0f, 0.0f) }), gl::GL_NONE_BIT);
@@ -952,6 +953,7 @@ void SphereRenderer::display()
 	programSpawn->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 	programSpawn->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
 	programSpawn->setUniform("radiusScale", ATOM_SIZE * radiusScale * scaleMult);
+	programSpawn->setUniform("outerRadius", ATOM_SIZE * scaleMult);
 	programSpawn->setUniform("clipRadiusScale", ATOM_SIZE * radiusScale * scaleMult);
 	programSpawn->setUniform("nearPlaneZ", nearPlane.z);
 	programSpawn->setUniform("animationDelta", animationDelta);
@@ -1015,7 +1017,6 @@ void SphereRenderer::display()
 	programSurface->setUniform("coloring", uint(coloring));
 	programSurface->setUniform("environment", environmentMapping);
 	programSurface->setUniform("lens", lens);
-	programSurface->setUniform("atomRadius", ATOM_SIZE * scaleMult);
 
 	programSurface->setUniform("gridScale", gridSize);
 	programSurface->setUniform("gridDepth", gridDepth);
@@ -1159,18 +1160,20 @@ void SphereRenderer::display()
 	// glVertexAttribPointer(1, 4, GL_UNSIGNED_INT, GL_FALSE, 2 * sizeof(glm::uvec4), (void*)(sizeof(glm::uvec4)));
 	// glEnableVertexAttribArray(1);
 
-	// // glPatchParameteri(GL_PATCH_VERTICES, 1);
+	// // // glPatchParameteri(GL_PATCH_VERTICES, 1);
 	// programTest->use();
 
-	// m_spherePositionTexture->bindActive(0);
-	// m_offsetTexture->bindActive(1);
+	// m_intersectionBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 0);
+	// // m_spherePositionTexture->bindActive(0);
+	// // m_offsetTexture->bindActive(1);
 	// programTest->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 	// // // m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
 	// // // m_redrawCounter->bindBase(GL_ATOMIC_COUNTER_BUFFER, 4);
 	// // glPointSize(10.f);
 	// m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
 	// programTest->release();
-	// m_sceneGraphBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
+	// // m_sceneGraphBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
+	// m_intersectionBuffer->unbind(GL_SHADER_STORAGE_BUFFER, 0);
 
 	if (viewportSize == viewer()->viewportSize())
 	{

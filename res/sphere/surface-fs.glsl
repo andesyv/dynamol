@@ -39,7 +39,6 @@ uniform float time = 0.0;
 uniform float var1 = 0.0;
 uniform float var2 = 0.0;
 uniform float var3 = 0.0;
-uniform float atomRadius = 1.7;
 
 in vec4 gFragmentPosition;
 out vec4 surfacePosition;
@@ -85,6 +84,7 @@ struct BufferEntry
 	vec3 center;
 	uint id;
 	uint previous;
+	float radius;
 };
 
 struct Cell
@@ -287,7 +287,7 @@ void main()
 						uint elementId = bitfieldExtract(id,0,8);
 
 						vec3 aj = intersections[ij].center;
-						float rj = atomRadius; // elements[elementId].radius;
+						float rj = intersections[ij].radius; // elements[elementId].radius;
 
 						vec3 atomOffset = currentPosition.xyz-aj;
 						float atomDistance = length(atomOffset)/rj;

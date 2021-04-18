@@ -6,6 +6,7 @@ uniform mat4 inverseModelViewProjectionMatrix;
 in vec4 gFragmentPosition;
 flat in vec4 gSpherePosition;
 flat in float gSphereRadius;
+flat in float gOuterRadius;
 flat in uint gSphereId;
 
 layout(binding = 0) uniform sampler2D positionTexture;
@@ -18,6 +19,7 @@ struct BufferEntry
 	vec3 center;
 	uint id;
 	uint previous;
+	float radius;
 };
 
 layout(std430, binding = 1) buffer intersectionBuffer
@@ -96,6 +98,8 @@ void main()
 	entry.center = gSpherePosition.xyz;
 	entry.id = gSphereId;
 	entry.previous = prev;
+	
+	entry.radius = gOuterRadius;
 
 	intersections[index] = entry;
 
