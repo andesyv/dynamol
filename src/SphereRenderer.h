@@ -51,6 +51,7 @@ namespace dynamol
 		std::unique_ptr<globjects::NamedString> m_shaderDefines = nullptr;
 
 		std::unique_ptr<globjects::Buffer> m_intersectionBuffer = std::make_unique<globjects::Buffer>();
+		std::unique_ptr<globjects::Buffer> m_intersectionCount = std::make_unique<globjects::Buffer>();
 		std::unique_ptr<globjects::Buffer> m_statisticsBuffer = std::make_unique<globjects::Buffer>();
 		std::unique_ptr<globjects::Texture> m_offsetTexture = nullptr;
 		std::unique_ptr<globjects::Texture> m_depthTexture = nullptr;
@@ -85,7 +86,7 @@ namespace dynamol
 
 		std::unique_ptr<globjects::Buffer> m_sceneGraphBuffer, m_denseAtomVertices,
 											m_sparseAtomVertices, m_triangleVertices;
-		std::unique_ptr<globjects::VertexArray> m_gridVAO = std::make_unique<globjects::VertexArray>();
+		std::unique_ptr<globjects::VertexArray> m_denseVAO = std::make_unique<globjects::VertexArray>();
 		std::unique_ptr<globjects::VertexArray> m_sparseVAO, m_triangleVAO, m_redrawingVAO, m_gridToPointVAO;
 		gl::GLsizei m_denseVertexCount{0}, m_sparseVertexCount{0};
 		const glm::uint gridSize;

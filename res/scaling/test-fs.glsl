@@ -22,5 +22,5 @@ out vec4 fragColor;
 void main() {
 	uint index = texelFetch(offsetTexture,ivec2(gl_FragCoord.xy),0).r;
 	const vec2 uv = (gFragmentPosition.xy / gFragmentPosition.w) * 0.5 + 0.5;
-	fragColor = vec4(vec3(index) / 1000000.0, 1.);
+	fragColor = vec4(vec3(index), 1.);
 }

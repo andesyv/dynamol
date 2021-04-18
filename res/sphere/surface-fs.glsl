@@ -103,9 +103,10 @@ layout(std430, binding = 7) buffer scenegraphBuffer
 	Cell cells[];
 };
 
+layout(binding = 1) uniform atomic_uint count;
+
 layout(std430, binding = 1) buffer intersectionBuffer
 {
-	uint count;
 	BufferEntry intersections[];
 };
 

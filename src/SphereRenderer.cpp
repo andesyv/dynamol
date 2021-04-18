@@ -98,7 +98,8 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 	m_chainColors->setStorage(viewer->scene()->protein()->activeChainColorsPacked(), gl::GL_NONE_BIT);
 
 	// Note: 1024 * 1024 * 128 seems like a very arbitrary number
-	m_intersectionBuffer->setStorage(sizeof(vec3) * 1024 * 1024 * 128 + sizeof(uint), nullptr, gl::GL_NONE_BIT);
+	m_intersectionBuffer->setStorage(sizeof(vec3) * 1024 * 1024 * 128, nullptr, gl::GL_NONE_BIT);
+	m_intersectionCount->setStorage(sizeof(uint), gl::GL_NONE_BIT);
 
 	m_verticesQuad->setStorage(std::array<vec3, 1>({ vec3(0.0f, 0.0f, 0.0f) }), gl::GL_NONE_BIT);
 	auto vertexBindingQuad = m_vaoQuad->binding(0);
@@ -398,11 +399,11 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 	m_denseAtomVertices->setStorage(viewer->scene()->protein()->m_genAtomsDense, gl::GL_NONE_BIT);
 	m_denseVertexCount = static_cast<gl::GLsizei>(viewer->scene()->protein()->m_genAtomsDense.size());
 	
-	auto vertexBinding = m_gridVAO->binding(0);
+	auto vertexBinding = m_denseVAO->binding(0);
 	vertexBinding->setAttribute(0);
 	vertexBinding->setBuffer(m_denseAtomVertices.get(), 0, sizeof(glm::vec4));
 	vertexBinding->setFormat(4, GL_FLOAT);
-	m_gridVAO->enable(0);
+	m_denseVAO->enable(0);
 
 	// Sparse points:
 	m_sparseAtomVertices = Buffer::create();
@@ -804,6 +805,16 @@ void SphereRenderer::display()
 	vertexBinding->setFormat(4, GL_FLOAT);
 	m_vao->enable(0);
 
+	struct LOD {
+		std::unique_ptr<globjects::VertexArray>& vao;
+		const int vCount;
+	};
+
+	const auto LODs = std::to_array<LOD>({
+		{ m_vao, vertexCount },
+		{ m_denseVAO, m_denseVertexCount },
+	});
+
 	// if (timestepCount > 0)
 	// {
 	// 	auto nextVertexBinding = m_vao->binding(1);
@@ -905,33 +916,40 @@ void SphereRenderer::display()
 
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
+		
+	programSphere->use();
 
 	programSphere->setUniform("modelViewMatrix", modelViewMatrix);
 	programSphere->setUniform("projectionMatrix", projectionMatrix);
 	programSphere->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 	programSphere->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
-	programSphere->setUniform("radiusScale", ATOM_SIZE * scaleMult);
-	programSphere->setUniform("clipRadiusScale", ATOM_SIZE * radiusScale * scaleMult);
 	programSphere->setUniform("nearPlaneZ", nearPlane.z);
 	programSphere->setUniform("animationDelta", animationDelta);
 	programSphere->setUniform("animationTime", animationTime);
 	programSphere->setUniform("animationAmplitude", animationAmplitude);
 	programSphere->setUniform("animationFrequency", animationFrequency);
 
-	m_vao->bind();
-	programSphere->use();
-	m_vao->drawArrays(GL_POINTS, 0, vertexCount);
-	programSphere->release();
-	m_vao->unbind();
+	for (uint i{0}; i < 2; ++i) {
+		auto& [vao, vCount] = LODs[i];
+		const auto scale = i == 0 ? scaleMult : (1.f - scaleMult);
 
+		programSphere->setUniform("radiusScale", ATOM_SIZE * scale);
+		programSphere->setUniform("clipRadiusScale", ATOM_SIZE * radiusScale * scale);
+
+		vao->drawArrays(GL_POINTS, 0, vCount);
+	}
+		
+	programSphere->release();
+		
 	//////////////////////////////////////////////////////////////////////////
 	// List generation pass
 	//////////////////////////////////////////////////////////////////////////
-	const uint intersectionClearValue = 1;
+	constexpr uint intersectionClearValue = 1;
 	// clear only the first intersection?
-	m_intersectionBuffer->clearSubData(GL_R32UI, 0, sizeof(uint), GL_RED_INTEGER, GL_UNSIGNED_INT, &intersectionClearValue);
+	// m_intersectionBuffer->clearSubData(GL_R32UI, 0, sizeof(uint), GL_RED_INTEGER, GL_UNSIGNED_INT, &intersectionClearValue);
+	m_intersectionCount->clearSubData(GL_R32UI, 0, sizeof(uint), GL_RED_INTEGER, GL_UNSIGNED_INT, &intersectionClearValue);
 
-	const uint offsetClearValue = 0;
+	constexpr uint offsetClearValue = 0;
 	m_offsetTexture->clearImage(0, GL_RED_INTEGER, GL_UNSIGNED_INT, &offsetClearValue);
 
 	glMemoryBarrier(GL_ALL_BARRIER_BITS);
@@ -943,42 +961,50 @@ void SphereRenderer::display()
 	// Positions of fragments of spheres (only closest to camera)
 	m_spherePositionTexture->bindActive(0);
 	m_intersectionBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 1);
+	m_intersectionCount->bindBase(GL_ATOMIC_COUNTER_BUFFER, 1);
 	m_offsetTexture->bindImageTexture(0, 0, false, 0, GL_READ_WRITE, GL_R32UI);
 	m_elementColorsRadii->bindBase(GL_UNIFORM_BUFFER, 0);
 	m_residueColors->bindBase(GL_UNIFORM_BUFFER, 1);
 	m_chainColors->bindBase(GL_UNIFORM_BUFFER, 2);
-
+	
+	programSpawn->use();
+	
 	programSpawn->setUniform("modelViewMatrix", modelViewMatrix);
 	programSpawn->setUniform("projectionMatrix", projectionMatrix);
 	programSpawn->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 	programSpawn->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
-	programSpawn->setUniform("radiusScale", ATOM_SIZE * radiusScale * scaleMult);
-	programSpawn->setUniform("outerRadius", ATOM_SIZE * scaleMult);
-	programSpawn->setUniform("clipRadiusScale", ATOM_SIZE * radiusScale * scaleMult);
 	programSpawn->setUniform("nearPlaneZ", nearPlane.z);
 	programSpawn->setUniform("animationDelta", animationDelta);
 	programSpawn->setUniform("animationTime", animationTime);
 	programSpawn->setUniform("animationAmplitude", animationAmplitude);
 	programSpawn->setUniform("animationFrequency", animationFrequency);
 
-	m_vao->bind();
-	programSpawn->use();
-	m_vao->drawArrays(GL_POINTS, 0, vertexCount);
+	for (uint i{0}; i < 2; ++i) {
+		auto& [vao, vCount] = LODs[i];
+		const auto scale = i == 0 ? scaleMult : (1.f - scaleMult);
+
+		programSpawn->setUniform("radiusScale", ATOM_SIZE * radiusScale * scale);
+		programSpawn->setUniform("outerRadius", ATOM_SIZE * scale);
+		programSpawn->setUniform("clipRadiusScale", ATOM_SIZE * radiusScale * scale);
+
+		vao->drawArrays(GL_POINTS, 0, vCount);
+	}
+		
 	programSpawn->release();
-	m_vao->unbind();
-
-
+	
 	m_spherePositionTexture->unbindActive(0);
+	m_intersectionCount->unbind(GL_ATOMIC_COUNTER_BUFFER);
 	m_intersectionBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
 	m_offsetTexture->unbindImageTexture(0);
 
-	m_sphereFramebuffer->unbind();
 	glMemoryBarrier(GL_ALL_BARRIER_BITS);
+
+	m_sphereFramebuffer->unbind();
 
 	//////////////////////////////////////////////////////////////////////////
 	// Surface intersection pass
 	//////////////////////////////////////////////////////////////////////////
-
+	
 	m_surfaceFramebuffer->bind();
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	glDepthMask(GL_TRUE);
@@ -994,6 +1020,7 @@ void SphereRenderer::display()
 	m_bumpTextures[bumpTextureIndex]->bindActive(5);
 	m_materialTextures[materialTextureIndex]->bindActive(6);
 	m_intersectionBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 1);
+	m_intersectionCount->bindBase(GL_ATOMIC_COUNTER_BUFFER, 1);
 	m_statisticsBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 2);
 
 	programSurface->setUniform("modelViewMatrix", modelViewMatrix);
@@ -1035,6 +1062,7 @@ void SphereRenderer::display()
 	m_vaoQuad->unbind();
 
 	m_intersectionBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
+	m_intersectionCount->unbind(GL_ATOMIC_COUNTER_BUFFER);
 
 	m_materialTextures[materialTextureIndex]->unbindActive(6);
 	m_bumpTextures[bumpTextureIndex]->unbindActive(5);
@@ -1048,6 +1076,7 @@ void SphereRenderer::display()
 	m_elementColorsRadii->unbind(GL_UNIFORM_BUFFER);
 
 	m_surfaceFramebuffer->unbind();
+
 
 	//////////////////////////////////////////////////////////////////////////
 	// Shading
@@ -1163,17 +1192,15 @@ void SphereRenderer::display()
 	// // // glPatchParameteri(GL_PATCH_VERTICES, 1);
 	// programTest->use();
 
-	// m_intersectionBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 0);
-	// // m_spherePositionTexture->bindActive(0);
-	// // m_offsetTexture->bindActive(1);
-	// programTest->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
-	// // // m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
-	// // // m_redrawCounter->bindBase(GL_ATOMIC_COUNTER_BUFFER, 4);
+	// m_spherePositionTexture->bindActive(0);
+	// m_offsetTexture->bindActive(1);
+	// // programTest->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 	// // glPointSize(10.f);
 	// m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
 	// programTest->release();
-	// // m_sceneGraphBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
-	// m_intersectionBuffer->unbind(GL_SHADER_STORAGE_BUFFER, 0);
+
+	// m_offsetTexture->unbindActive(1);
+	// m_spherePositionTexture->unbindActive(0);
 
 	if (viewportSize == viewer()->viewportSize())
 	{

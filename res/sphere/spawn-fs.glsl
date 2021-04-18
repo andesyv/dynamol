@@ -22,9 +22,10 @@ struct BufferEntry
 	float radius;
 };
 
+layout(binding = 1) uniform atomic_uint count;
+
 layout(std430, binding = 1) buffer intersectionBuffer
 {
-	uint count;
 	BufferEntry intersections[];
 };
 
@@ -90,7 +91,7 @@ void main()
 	if (entry.near > position.w)
 		discard;	
 
-	uint index = atomicAdd(count,1);
+	uint index = atomicCounterIncrement(count);
 	uint prev = imageAtomicExchange(offsetImage,ivec2(gl_FragCoord.xy),index);
 
 	entry.far = length(sphere.far.xyz-near.xyz);
