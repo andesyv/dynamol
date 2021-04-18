@@ -241,8 +241,8 @@ void main()
 	uint sphereId = floatBitsToUint(gl_in[0].gl_Position.w);
 	uint elementId = bitfieldExtract(sphereId,0,8);
     const float instanceScale = mix(1., 2., float(elementId) / 1000.0);
-	float sphereRadius = 1.7/*elements[elementId].radius*/*radiusScale * instanceScale;
-	float sphereClipRadius = 1.7/*elements[elementId].radius*/*clipRadiusScale * instanceScale;
+	float sphereRadius = radiusScale * instanceScale;
+	float sphereClipRadius = clipRadiusScale * instanceScale;
 	
 	gSphereId = sphereId;
 	gSpherePosition = gl_in[0].gl_Position;
@@ -254,52 +254,53 @@ void main()
 	float radius = length(size);
 
     // If radius is above a certain threshold, subdivide into smaller LOD in next step:
-    if (sphereId % 100 < int(replaceScale * 100.0)) {
-        // redrawPositions[index] = gl_in[0].gl_Position;
-        // Find 9 new cells to render next iteration:
-        // 1. Find base offset to current LOD level:
-        uint baseOffset = 0;
-        const uint gridScale3 = gridScale * gridScale * gridScale;
-        uint gridStep = powi(2, LOD);
-        for (uint d = 1; d < LOD; ++d)
-            baseOffset += d * d * d * gridScale3;
+    // if (sphereId % 100 < int(replaceScale * 100.0)) {
+    //     // redrawPositions[index] = gl_in[0].gl_Position;
+    //     // Find 9 new cells to render next iteration:
+    //     // 1. Find base offset to current LOD level:
+    //     uint baseOffset = 0;
+    //     const uint gridScale3 = gridScale * gridScale * gridScale;
+    //     uint gridStep = powi(2, LOD);
+    //     for (uint d = 1; d < LOD; ++d)
+    //         baseOffset += d * d * d * gridScale3;
         
-        const vec3 bdir = (maxb - minb + 2.0 * BIAS).xyz / float(gridStep);
+    //     const vec3 bdir = (maxb - minb + 2.0 * BIAS).xyz / float(gridStep);
 
-        // 2. Calculate current cell index:
-        vec3 dir = c.xyz - minb - BIAS;
-        ivec3 gridIndex = ivec3(floor(dir / bdir));
-        float dist = 1000000.0;
+    //     // 2. Calculate current cell index:
+    //     vec3 dir = c.xyz - minb - BIAS;
+    //     ivec3 gridIndex = ivec3(floor(dir / bdir));
+    //     float dist = 1000000.0;
 
-        // 3. Sample all neighbouring cells:
-        for (int z = -1; z < 2; ++z) {
-            for (int y = -1; y < 2; ++y) {
-                for (int x = -1; x < 2; ++x) {
-                    ivec3 offsetGridIndex = ivec3(gridIndex.x + x, gridIndex.y + y, gridIndex.z + z);
-                    // Bounds checking:
-                    if (offsetGridIndex.x < 0 ||
-                        offsetGridIndex.y < 0 ||
-                        offsetGridIndex.z < 0 ||
-                        gridStep < offsetGridIndex.x ||
-                        gridStep < offsetGridIndex.y ||
-                        gridStep < offsetGridIndex.z)
-                            continue;
+    //     // 3. Sample all neighbouring cells:
+    //     for (int z = -1; z < 2; ++z) {
+    //         for (int y = -1; y < 2; ++y) {
+    //             for (int x = -1; x < 2; ++x) {
+    //                 ivec3 offsetGridIndex = ivec3(gridIndex.x + x, gridIndex.y + y, gridIndex.z + z);
+    //                 // Bounds checking:
+    //                 if (offsetGridIndex.x < 0 ||
+    //                     offsetGridIndex.y < 0 ||
+    //                     offsetGridIndex.z < 0 ||
+    //                     gridStep < offsetGridIndex.x ||
+    //                     gridStep < offsetGridIndex.y ||
+    //                     gridStep < offsetGridIndex.z)
+    //                         continue;
                         
-                    uint index = baseOffset + offsetGridIndex.x + offsetGridIndex.y * gridStep + offsetGridIndex.z * gridStep * gridStep;
+    //                 uint index = baseOffset + offsetGridIndex.x + offsetGridIndex.y * gridStep + offsetGridIndex.z * gridStep * gridStep;
                     
-                    // 4. Add index to list of cells to redraw
-                    redrawCells[atomicCounterIncrement(redrawCount)] = index;
-                }
-            }
-        }
+    //                 // 4. Add index to list of cells to redraw
+    //                 redrawCells[atomicCounterIncrement(redrawCount)] = index;
+    //             }
+    //         }
+    //     }
 
-        return;
-    }
+    //     return;
+    // }
 
 	vec4 clipSize = modelViewMatrix * vec4( sphereClipRadius, 0.0,0.0,0.0);
 	float clipRadius = length(clipSize);
 
-	if (c.z + clipRadius >= nearPlaneZ)
+	// Skip whole sphere if intersecting with near plane
+    if (c.z + clipRadius >= nearPlaneZ)
 		return;
 	
     // We'll duplicate the first line into the last spot to avoid modular arithmetic while looping

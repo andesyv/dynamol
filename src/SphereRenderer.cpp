@@ -192,10 +192,10 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 		});
 
 	createShaderProgram("test", {
-		{ GL_VERTEX_SHADER, "./res/scaling/test-vs.glsl"},
+		{ GL_VERTEX_SHADER, "./res/sphere/image-vs.glsl"},
 		// { GL_TESS_CONTROL_SHADER, "./res/scaling/test-tcs.glsl"},
 		// { GL_TESS_EVALUATION_SHADER, "./res/scaling/test-es.glsl"},
-		// { GL_GEOMETRY_SHADER, "./res/sphere/image-gs.glsl"},
+		{ GL_GEOMETRY_SHADER, "./res/sphere/image-gs.glsl"},
 		{ GL_FRAGMENT_SHADER,"./res/scaling/test-fs.glsl" },
 	});
 
@@ -596,7 +596,7 @@ void SphereRenderer::display()
 	static uint materialTextureIndex = 0;
 	static uint bumpTextureIndex = 0;
 
-	static float replaceScaleParam{0.01f};
+	static float replaceScaleParam{0.01f}, scaleMult{1.f};
 	static int startLODParam{1};
 
 	// user interface for manipulating rendering parameters
@@ -741,6 +741,7 @@ void SphereRenderer::display()
 
 	if (ImGui::BeginMenu("Other Shit")) {
 		ImGui::SliderFloat("ReplaceScale", &replaceScaleParam, 0.f, 1.f);
+		ImGui::SliderFloat("ScaleMult", &scaleMult, 0.f, 1.f);
 		ImGui::SliderInt("Start LOD", &startLODParam, 1, 4);
 		ImGui::EndMenu();
 	}
@@ -810,6 +811,8 @@ void SphereRenderer::display()
 	// 	nextVertexBinding->setFormat(4, GL_FLOAT);
 	// 	m_vao->enable(1);
 	// }
+
+	constexpr float ATOM_SIZE = 1.7f;
 
 	//////////////////////////////////////////////////////////////////////////
 	// Grid calculation pass
@@ -903,10 +906,11 @@ void SphereRenderer::display()
 	glDepthFunc(GL_LESS);
 
 	programSphere->setUniform("modelViewMatrix", modelViewMatrix);
+	programSphere->setUniform("projectionMatrix", projectionMatrix);
 	programSphere->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 	programSphere->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
-	programSphere->setUniform("radiusScale", 1.0f);
-	programSphere->setUniform("clipRadiusScale", radiusScale);
+	programSphere->setUniform("radiusScale", ATOM_SIZE * scaleMult);
+	programSphere->setUniform("clipRadiusScale", ATOM_SIZE * radiusScale * scaleMult);
 	programSphere->setUniform("nearPlaneZ", nearPlane.z);
 	programSphere->setUniform("animationDelta", animationDelta);
 	programSphere->setUniform("animationTime", animationTime);
@@ -923,6 +927,7 @@ void SphereRenderer::display()
 	// List generation pass
 	//////////////////////////////////////////////////////////////////////////
 	const uint intersectionClearValue = 1;
+	// clear only the first intersection?
 	m_intersectionBuffer->clearSubData(GL_R32UI, 0, sizeof(uint), GL_RED_INTEGER, GL_UNSIGNED_INT, &intersectionClearValue);
 
 	const uint offsetClearValue = 0;
@@ -934,7 +939,9 @@ void SphereRenderer::display()
 	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 	glDepthMask(GL_FALSE);
 
+	// Positions of fragments of spheres (only closest to camera)
 	m_spherePositionTexture->bindActive(0);
+	m_intersectionBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 1);
 	m_offsetTexture->bindImageTexture(0, 0, false, 0, GL_READ_WRITE, GL_R32UI);
 	m_elementColorsRadii->bindBase(GL_UNIFORM_BUFFER, 0);
 	m_residueColors->bindBase(GL_UNIFORM_BUFFER, 1);
@@ -944,8 +951,8 @@ void SphereRenderer::display()
 	programSpawn->setUniform("projectionMatrix", projectionMatrix);
 	programSpawn->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 	programSpawn->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
-	programSpawn->setUniform("radiusScale", radiusScale);
-	programSpawn->setUniform("clipRadiusScale", radiusScale);
+	programSpawn->setUniform("radiusScale", ATOM_SIZE * radiusScale * scaleMult);
+	programSpawn->setUniform("clipRadiusScale", ATOM_SIZE * radiusScale * scaleMult);
 	programSpawn->setUniform("nearPlaneZ", nearPlane.z);
 	programSpawn->setUniform("animationDelta", animationDelta);
 	programSpawn->setUniform("animationTime", animationTime);
@@ -1008,6 +1015,7 @@ void SphereRenderer::display()
 	programSurface->setUniform("coloring", uint(coloring));
 	programSurface->setUniform("environment", environmentMapping);
 	programSurface->setUniform("lens", lens);
+	programSurface->setUniform("atomRadius", ATOM_SIZE * scaleMult);
 
 	programSurface->setUniform("gridScale", gridSize);
 	programSurface->setUniform("gridDepth", gridDepth);
@@ -1125,14 +1133,10 @@ void SphereRenderer::display()
 
 
 	// Draw test square
-
-	// m_offsetTexture->bindImageTexture(0, 0, false, 0, GL_READ_WRITE, GL_R32UI);
-	// m_offsetTexture->bindActive(0);
-
-	// glClearDepth(1.0f);
-	// glClearColor(0.2, 0.3, 0.5, 1.0f);
-	// glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	// glDisable(GL_DEPTH_TEST);
+	glClearDepth(1.0f);
+	glClearColor(0.2, 0.3, 0.5, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glDisable(GL_DEPTH_TEST);
 
 	
 	// vertexBinding = m_triangleVAO->binding(1);
@@ -1156,15 +1160,16 @@ void SphereRenderer::display()
 	// glEnableVertexAttribArray(1);
 
 	// // glPatchParameteri(GL_PATCH_VERTICES, 1);
-	// m_triangleVAO->bind();
-	// programTest->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 	// programTest->use();
-	// // m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
-	// // m_redrawCounter->bindBase(GL_ATOMIC_COUNTER_BUFFER, 4);
-	// glPointSize(10.f);
-	// m_triangleVAO->drawArrays(GL_POINTS, 0, 9);
+
+	// m_spherePositionTexture->bindActive(0);
+	// m_offsetTexture->bindActive(1);
+	// programTest->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
+	// // // m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
+	// // // m_redrawCounter->bindBase(GL_ATOMIC_COUNTER_BUFFER, 4);
+	// // glPointSize(10.f);
+	// m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
 	// programTest->release();
-	// m_triangleVAO->unbind();
 	// m_sceneGraphBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
 
 	if (viewportSize == viewer()->viewportSize())

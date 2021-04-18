@@ -39,6 +39,7 @@ uniform float time = 0.0;
 uniform float var1 = 0.0;
 uniform float var2 = 0.0;
 uniform float var3 = 0.0;
+uniform float atomRadius = 1.7;
 
 in vec4 gFragmentPosition;
 out vec4 surfacePosition;
@@ -158,12 +159,14 @@ void main()
 	uint entryCount = 0;
 	uint indices[maxEntries];
 
+	// Traverse a-buffer and extract entries. (0 means empty)
 	while (offset > 0)
 	{
 		indices[entryCount++] = offset;
 		offset = intersections[offset].previous;
 	}
 
+	// Exit just in case (technically should never arrive here because offset would be 0)
 	if (entryCount == 0)
 		discard;
 
@@ -213,6 +216,7 @@ void main()
 	{
 		uint minimumIndex = currentIndex;
 
+		// Find minimum index (based on near distance)
 		for(uint i = currentIndex+1; i < entryCount; i++)
 		{
 			if(intersections[indices[i]].near < intersections[indices[minimumIndex]].near)
@@ -221,6 +225,7 @@ void main()
 			}
 		}
 
+		// Selection sort swap:
 		if (minimumIndex != currentIndex)
 		{
 			uint temp = indices[minimumIndex];
@@ -282,7 +287,7 @@ void main()
 						uint elementId = bitfieldExtract(id,0,8);
 
 						vec3 aj = intersections[ij].center;
-						float rj = elements[elementId].radius;
+						float rj = atomRadius; // elements[elementId].radius;
 
 						vec3 atomOffset = currentPosition.xyz-aj;
 						float atomDistance = length(atomOffset)/rj;
