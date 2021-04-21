@@ -598,7 +598,7 @@ void SphereRenderer::display()
 	static uint materialTextureIndex = 0;
 	static uint bumpTextureIndex = 0;
 
-	static float replaceScaleParam{0.01f}, scaleMult{1.f};
+	static float replaceScaleParam{0.01f}, interpolation{1.f};
 	static int startLODParam{1};
 
 	// user interface for manipulating rendering parameters
@@ -743,7 +743,7 @@ void SphereRenderer::display()
 
 	if (ImGui::BeginMenu("Other Shit")) {
 		ImGui::SliderFloat("ReplaceScale", &replaceScaleParam, 0.f, 1.f);
-		ImGui::SliderFloat("ScaleMult", &scaleMult, 0.f, 1.f);
+		ImGui::SliderFloat("Interpolation", &interpolation, 0.f, 1.f);
 		ImGui::SliderInt("Start LOD", &startLODParam, 1, 4);
 		ImGui::EndMenu();
 	}
@@ -834,12 +834,11 @@ void SphereRenderer::display()
 	const unsigned long long gridCount = (pow(8, gridDepth + 1) - 8) / 7;
 	// std::vector<std::pair<glm::uvec4, glm::uvec4>> emptyBuffer{};
 	// emptyBuffer.resize(gridCount, {});
-	// m_sceneGraphBuffer->clearSubData(GL_RGBA32UI, 0, 2 * sizeof(glm::uvec4) * gridCount, GL_RGBA, GL_UNSIGNED_INT, nullptr);
-	// m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
+	m_sceneGraphBuffer->clearSubData(GL_RGBA32UI, 0, 2 * sizeof(glm::uvec4) * gridCount, GL_RGBA, GL_UNSIGNED_INT, nullptr);
+	m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
 
 	const std::pair bounds{viewer()->scene()->protein()->minimumBounds(), viewer()->scene()->protein()->maximumBounds()};
 
-	/*
 	programGrid->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 	programGrid->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
 	programGrid->setUniform("gridScale", gridSize);
@@ -847,16 +846,14 @@ void SphereRenderer::display()
 	programGrid->setUniform("minb", bounds.first);
 	programGrid->setUniform("maxb", bounds.second);
 
-	/// TODO: Remember I don't need to bind in order to use globject::drawArrays
-	m_sparseVAO->bind();
+	auto& [gridVAO, gridVCount] = LODs[0];
+
 	programGrid->use();
 	glPointSize(10.f);
-	m_sparseVAO->drawArrays(GL_POINTS, 0, m_sparseVertexCount);
+	gridVAO->drawArrays(GL_POINTS, 0, gridVCount);
 	programGrid->release();
-	m_sparseVAO->unbind();
 
 	m_sceneGraphBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
-	*/
 
 	/*
 	//////////////////////////////////////////////////////////////////////////
@@ -928,18 +925,26 @@ void SphereRenderer::display()
 	programSphere->setUniform("animationTime", animationTime);
 	programSphere->setUniform("animationAmplitude", animationAmplitude);
 	programSphere->setUniform("animationFrequency", animationFrequency);
+	programSphere->setUniform("gridScale", gridSize);
+	programSphere->setUniform("minb", bounds.first);
+	programSphere->setUniform("maxb", bounds.second);
+
+	m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
 
 	for (uint i{0}; i < 2; ++i) {
 		auto& [vao, vCount] = LODs[i];
-		const auto scale = i == 0 ? scaleMult : (1.f - scaleMult);
+		const auto scale = i == 0 ? interpolation : (1.f - interpolation);
 
 		programSphere->setUniform("radiusScale", ATOM_SIZE * scale);
 		programSphere->setUniform("clipRadiusScale", ATOM_SIZE * radiusScale * scale);
+		programSphere->setUniform("clustering", i == 0 ? 0.f : 1.f - interpolation);
 
 		vao->drawArrays(GL_POINTS, 0, vCount);
 	}
 		
 	programSphere->release();
+
+	m_sceneGraphBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
 		
 	//////////////////////////////////////////////////////////////////////////
 	// List generation pass
@@ -978,14 +983,18 @@ void SphereRenderer::display()
 	programSpawn->setUniform("animationTime", animationTime);
 	programSpawn->setUniform("animationAmplitude", animationAmplitude);
 	programSpawn->setUniform("animationFrequency", animationFrequency);
+	programSpawn->setUniform("gridScale", gridSize);
+	programSpawn->setUniform("minb", bounds.first);
+	programSpawn->setUniform("maxb", bounds.second);
 
 	for (uint i{0}; i < 2; ++i) {
 		auto& [vao, vCount] = LODs[i];
-		const auto scale = i == 0 ? scaleMult : (1.f - scaleMult);
+		const auto scale = i == 0 ? interpolation : (1.f - interpolation);
 
 		programSpawn->setUniform("radiusScale", ATOM_SIZE * radiusScale * scale);
 		programSpawn->setUniform("outerRadius", ATOM_SIZE * scale);
 		programSpawn->setUniform("clipRadiusScale", ATOM_SIZE * radiusScale * scale);
+		programSpawn->setUniform("clustering", i == 0 ? 0.f : 1.f - interpolation);
 
 		vao->drawArrays(GL_POINTS, 0, vCount);
 	}
@@ -1163,10 +1172,10 @@ void SphereRenderer::display()
 
 
 	// Draw test square
-	glClearDepth(1.0f);
-	glClearColor(0.2, 0.3, 0.5, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glDisable(GL_DEPTH_TEST);
+	// glClearDepth(1.0f);
+	// glClearColor(0.2, 0.3, 0.5, 1.0f);
+	// glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	// glDisable(GL_DEPTH_TEST);
 
 	
 	// vertexBinding = m_triangleVAO->binding(1);

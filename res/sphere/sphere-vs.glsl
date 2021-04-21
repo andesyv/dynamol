@@ -11,6 +11,27 @@ uniform float animationTime;
 uniform float animationAmplitude;
 uniform float animationFrequency;
 
+uniform float clustering = 0.0;
+uniform uint gridScale = 2;
+uniform vec3 maxb;
+uniform vec3 minb;
+
+struct Cell
+{
+	// Sum of positions in this cell
+	uvec4 pos;
+	// Count of particles in this cell
+	uint count;
+	// Offset to first child cell.
+	// Child cells: [offset, offset + 1, offset + 2, ..., offset + 7]
+	// uint childOffset;
+};
+
+layout(std430, binding = 7) buffer scenegraphBuffer
+{
+	Cell cells[];
+};
+
 //	Simplex 4D Noise 
 //	by Ian McEwan, Ashima Arts
 //
@@ -105,11 +126,88 @@ float snoise(vec4 v){
 
 }
 
+uint powi(uint x, uint p) {
+  uint y = 1;
+  for (uint d = 0; d < p; ++d)
+    y *= x;
+  return y;
+}
+
 //#include "/globals.glsl";
 //#define ANIMATION
 void main()
 {
 	vec4 vertexPosition = position;
+
+  if (0.1 < clustering) {
+    const float BIAS = 0.001;
+    uint offsetIndex = 0;
+    float dist = 1000000.0;
+    vec3 closestPos = vertexPosition.xyz;
+
+    for (uint LOD = 1; LOD < 6; LOD++) {
+      // 1. Navigate to correct cell:
+      offsetIndex = (powi(8, LOD+1) - 8) / 7;
+      const uint gridScale3 = gridScale * gridScale * gridScale;
+      uint gridStep = powi(gridScale, LOD);
+
+      vec3 bdir = (maxb - minb + 2.0 * BIAS).xyz / float(gridStep);
+
+      // Calculate index:
+      vec3 dir = vertexPosition.xyz - minb - BIAS;
+      ivec3 gridIndex = ivec3(floor(dir / bdir));
+
+      uint pCount = 0;
+
+      // Check 3 ranges of increasing size
+      // Note: Checking increasing ranges has n^3 complexity, as opposed to
+      // checking different levels which should have log(d) complexity, so should
+      // probably do that preemtively.
+      for (int r = 0; r < 3; ++r) {
+        for (int z = -r; z < r + 1; ++z) {
+          for (int y = -r; y < r + 1; y++) {
+            for (int x = -r; x < r + 1; x++) {
+              // Skip grids we've already accounted for
+              if (!(abs(x) == r || abs(y) == r || abs(z) == r))
+                continue;
+
+              ivec3 offsetGridIndex = ivec3(gridIndex.x + x, gridIndex.y + y, gridIndex.z + z);
+              // Bounds checking:
+              if (offsetGridIndex.x < 0 ||
+                offsetGridIndex.y < 0 ||
+                offsetGridIndex.z < 0 ||
+                gridStep < offsetGridIndex.x ||
+                gridStep < offsetGridIndex.y ||
+                gridStep < offsetGridIndex.z)
+                continue;
+
+              uint index = offsetIndex + offsetGridIndex.x + offsetGridIndex.y * gridStep + offsetGridIndex.z * gridStep * gridStep;
+              if (0 < cells[index].count) {
+                vec3 cellPos = vec3(cells[index].pos.xyz) / float(cells[index].count * 1000);
+                float d = length(cellPos - vertexPosition.xyz);
+                if (d < dist) {
+                  dist = d;
+                  closestPos = cellPos;
+                  pCount = cells[index].count;
+                }
+              }
+            }
+          }
+        }
+        if (dist < 10000.0)
+          break;
+      }
+      
+      // If grid count was less than threshold, we don't need to go any deeper.
+      if (pCount < 10)
+        break;
+    }
+
+
+    if (dist < 10000.0) {
+      vertexPosition.xyz = mix(vertexPosition.xyz, closestPos, clustering);
+    }
+  }
 
 #ifdef INTERPOLATION
 	vertexPosition.xyz = mix(position.xyz,nextPosition.xyz,animationDelta);
