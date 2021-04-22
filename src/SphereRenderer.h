@@ -84,7 +84,7 @@ namespace dynamol
 		glm::ivec2 m_shadowMapSize = glm::ivec2(512, 512);
 		glm::ivec2 m_framebufferSize;
 
-		std::unique_ptr<globjects::Buffer> m_sceneGraphBuffer, m_denseAtomVertices,
+		std::unique_ptr<globjects::Buffer> m_sceneGraphBuffer, m_denseAtomVertices, m_hiarchyVertices,
 											m_sparseAtomVertices, m_triangleVertices;
 		std::unique_ptr<globjects::VertexArray> m_denseVAO = std::make_unique<globjects::VertexArray>();
 		std::unique_ptr<globjects::VertexArray> m_sparseVAO, m_triangleVAO, m_redrawingVAO, m_gridToPointVAO;

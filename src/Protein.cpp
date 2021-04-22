@@ -225,17 +225,23 @@ void Protein::load(const std::string& filename)
 
 	globjects::debug() << uint(m_atoms.size()) << " timesteps loaded." << std::endl;
 
-	// Generate LOD (for testing):
+
 	const auto& atom = m_atoms.back();
+	// Generate hierarchical points (LOD0):
+	m_hierarchyPoints.reserve(atom.size());
+	for (const auto& a : atom)
+		m_hierarchyPoints.emplace_back(a, glm::vec4{});
+
+	// Generate LOD (for testing):
 	m_genAtomsDense.reserve(atom.size() * 10);
-	const auto offset = 20.0;
-	for (const auto& particle : atom) {
+	const auto offset = 4.0;
+	for (const auto& parent : atom) {
 		// Generate some particles with random offsets to the parent:
 		for (uint i{0}; i < 10; ++i) {
 			const auto r = [offset](){ return ((ran() % 1000 * 0.001) - 0.5) * offset; };
-			auto p = particle + static_cast<glm::vec4>(glm::dvec4{r(), r(), r(), 0.0});
+			auto p = parent + static_cast<glm::vec4>(glm::dvec4{r(), r(), r(), 0.0});
 			// p.w = 1.0;
-			m_genAtomsDense.push_back(p);
+			m_genAtomsDense.emplace_back(p, parent);
 		}
 	}
 

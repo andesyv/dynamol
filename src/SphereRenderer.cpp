@@ -395,15 +395,34 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 	m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
 
 	// Vertex binding setup
+	m_hiarchyVertices = Buffer::create();
+	m_hiarchyVertices->setStorage(viewer->scene()->protein()->m_hierarchyPoints, gl::GL_NONE_BIT);
+	
+	auto vertexBinding = m_vao->binding(0);
+	vertexBinding->setAttribute(0);
+	vertexBinding->setBuffer(m_hiarchyVertices.get(), 0, sizeof(Protein::HierchicalPoints));
+	vertexBinding->setFormat(4, GL_FLOAT);
+	m_vao->enable(0);
+	vertexBinding = m_vao->binding(1);
+	vertexBinding->setAttribute(1);
+	vertexBinding->setBuffer(m_hiarchyVertices.get(), sizeof(glm::vec4), sizeof(Protein::HierchicalPoints));
+	vertexBinding->setFormat(4, GL_FLOAT);
+	m_vao->enable(1);
+
 	m_denseAtomVertices = Buffer::create();
 	m_denseAtomVertices->setStorage(viewer->scene()->protein()->m_genAtomsDense, gl::GL_NONE_BIT);
 	m_denseVertexCount = static_cast<gl::GLsizei>(viewer->scene()->protein()->m_genAtomsDense.size());
 	
-	auto vertexBinding = m_denseVAO->binding(0);
+	vertexBinding = m_denseVAO->binding(0);
 	vertexBinding->setAttribute(0);
-	vertexBinding->setBuffer(m_denseAtomVertices.get(), 0, sizeof(glm::vec4));
+	vertexBinding->setBuffer(m_denseAtomVertices.get(), 0, sizeof(Protein::HierchicalPoints));
 	vertexBinding->setFormat(4, GL_FLOAT);
 	m_denseVAO->enable(0);
+	vertexBinding = m_denseVAO->binding(1);
+	vertexBinding->setAttribute(1);
+	vertexBinding->setBuffer(m_denseAtomVertices.get(), sizeof(glm::vec4), sizeof(Protein::HierchicalPoints));
+	vertexBinding->setFormat(4, GL_FLOAT);
+	m_denseVAO->enable(1);
 
 	// Sparse points:
 	m_sparseAtomVertices = Buffer::create();
@@ -598,7 +617,7 @@ void SphereRenderer::display()
 	static uint materialTextureIndex = 0;
 	static uint bumpTextureIndex = 0;
 
-	static float replaceScaleParam{0.01f}, interpolation{1.f};
+	static float replaceScaleParam{0.01f}, interpolation{0.f};
 	static int startLODParam{1};
 
 	// user interface for manipulating rendering parameters
@@ -798,21 +817,22 @@ void SphereRenderer::display()
 		reloadShaders();
 	}
 
-	// Vertex binding setup
-	auto vertexBinding = m_vao->binding(0);
-	vertexBinding->setAttribute(0);
-	vertexBinding->setBuffer(m_vertices[currentTimestep].get(), 0, sizeof(vec4));
-	vertexBinding->setFormat(4, GL_FLOAT);
-	m_vao->enable(0);
+	// // Vertex binding setup
+	// auto vertexBinding = m_vao->binding(0);
+	// vertexBinding->setAttribute(0);
+	// vertexBinding->setBuffer(m_vertices[currentTimestep].get(), 0, sizeof(vec4));
+	// vertexBinding->setFormat(4, GL_FLOAT);
+	// m_vao->enable(0);
 
 	struct LOD {
 		std::unique_ptr<globjects::VertexArray>& vao;
 		const int vCount;
+		float radius = 1.7f;
 	};
 
 	const auto LODs = std::to_array<LOD>({
-		{ m_vao, vertexCount },
-		{ m_denseVAO, m_denseVertexCount },
+		{ m_vao, vertexCount, 1.7f },	// LOD0
+		{ m_denseVAO, m_denseVertexCount, 1.f }, // LOD1
 	});
 
 	// if (timestepCount > 0)
@@ -827,7 +847,7 @@ void SphereRenderer::display()
 	constexpr float ATOM_SIZE = 1.7f;
 
 	//////////////////////////////////////////////////////////////////////////
-	// Grid calculation pass
+	// Grid calculation passs
 	//////////////////////////////////////////////////////////////////////////
 	// Clear SSBO
 	// Use sum of geometric series (a = 8, k = 8) to calculate grid size.
@@ -846,7 +866,7 @@ void SphereRenderer::display()
 	programGrid->setUniform("minb", bounds.first);
 	programGrid->setUniform("maxb", bounds.second);
 
-	auto& [gridVAO, gridVCount] = LODs[0];
+	auto& [gridVAO, gridVCount, _] = LODs[0];
 
 	programGrid->use();
 	glPointSize(10.f);
@@ -932,11 +952,12 @@ void SphereRenderer::display()
 	m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
 
 	for (uint i{0}; i < 2; ++i) {
-		auto& [vao, vCount] = LODs[i];
-		const auto scale = i == 0 ? interpolation : (1.f - interpolation);
+		auto& [vao, vCount, atomSize] = LODs[i];
+		const auto scale = i == 0 ? (1.f - interpolation) : interpolation;
 
-		programSphere->setUniform("radiusScale", ATOM_SIZE * scale);
-		programSphere->setUniform("clipRadiusScale", ATOM_SIZE * radiusScale * scale);
+		programSphere->setUniform("radiusScale", atomSize * scale);
+		// programSpawn->setUniform("outerRadius", ATOM_SIZE * scale);
+		programSphere->setUniform("clipRadiusScale", atomSize * radiusScale * scale);
 		programSphere->setUniform("clustering", i == 0 ? 0.f : 1.f - interpolation);
 
 		vao->drawArrays(GL_POINTS, 0, vCount);
@@ -988,12 +1009,12 @@ void SphereRenderer::display()
 	programSpawn->setUniform("maxb", bounds.second);
 
 	for (uint i{0}; i < 2; ++i) {
-		auto& [vao, vCount] = LODs[i];
-		const auto scale = i == 0 ? interpolation : (1.f - interpolation);
+		auto& [vao, vCount, atomSize] = LODs[i];
+		const auto scale = i == 0 ? (1.f - interpolation) : interpolation;
 
-		programSpawn->setUniform("radiusScale", ATOM_SIZE * radiusScale * scale);
-		programSpawn->setUniform("outerRadius", ATOM_SIZE * scale);
-		programSpawn->setUniform("clipRadiusScale", ATOM_SIZE * radiusScale * scale);
+		programSpawn->setUniform("radiusScale", atomSize * radiusScale * scale);
+		programSpawn->setUniform("outerRadius", atomSize * scale);
+		programSpawn->setUniform("clipRadiusScale", atomSize * radiusScale * scale);
 		programSpawn->setUniform("clustering", i == 0 ? 0.f : 1.f - interpolation);
 
 		vao->drawArrays(GL_POINTS, 0, vCount);

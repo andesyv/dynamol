@@ -3,6 +3,7 @@
 #include "/defines.glsl"
 
 in vec4 position;
+in vec4 parentPosition;
 #ifdef INTERPOLATION
 in vec4 nextPosition;
 #endif
@@ -139,75 +140,77 @@ void main()
 {
 	vec4 vertexPosition = position;
 
-  if (0.1 < clustering) {
-    const float BIAS = 0.001;
-    uint offsetIndex = 0;
-    float dist = 1000000.0;
-    vec3 closestPos = vertexPosition.xyz;
+  vertexPosition.xyz = mix(vertexPosition.xyz, parentPosition.xyz, clustering);
 
-    for (uint LOD = 1; LOD < 6; LOD++) {
-      // 1. Navigate to correct cell:
-      offsetIndex = (powi(8, LOD+1) - 8) / 7;
-      const uint gridScale3 = gridScale * gridScale * gridScale;
-      uint gridStep = powi(gridScale, LOD);
+  // if (0.1 < clustering) {
+  //   const float BIAS = 0.001;
+  //   uint offsetIndex = 0;
+  //   float dist = 1000000.0;
+  //   vec3 closestPos = vertexPosition.xyz;
 
-      vec3 bdir = (maxb - minb + 2.0 * BIAS).xyz / float(gridStep);
+  //   for (uint LOD = 1; LOD < 6; LOD++) {
+  //     // 1. Navigate to correct cell:
+  //     offsetIndex = (powi(8, LOD+1) - 8) / 7;
+  //     const uint gridScale3 = gridScale * gridScale * gridScale;
+  //     uint gridStep = powi(gridScale, LOD);
 
-      // Calculate index:
-      vec3 dir = vertexPosition.xyz - minb - BIAS;
-      ivec3 gridIndex = ivec3(floor(dir / bdir));
+  //     vec3 bdir = (maxb - minb + 2.0 * BIAS).xyz / float(gridStep);
 
-      uint pCount = 0;
+  //     // Calculate index:
+  //     vec3 dir = vertexPosition.xyz - minb - BIAS;
+  //     ivec3 gridIndex = ivec3(floor(dir / bdir));
 
-      // Check 3 ranges of increasing size
-      // Note: Checking increasing ranges has n^3 complexity, as opposed to
-      // checking different levels which should have log(d) complexity, so should
-      // probably do that preemtively.
-      for (int r = 0; r < 3; ++r) {
-        for (int z = -r; z < r + 1; ++z) {
-          for (int y = -r; y < r + 1; y++) {
-            for (int x = -r; x < r + 1; x++) {
-              // Skip grids we've already accounted for
-              if (!(abs(x) == r || abs(y) == r || abs(z) == r))
-                continue;
+  //     uint pCount = 0;
 
-              ivec3 offsetGridIndex = ivec3(gridIndex.x + x, gridIndex.y + y, gridIndex.z + z);
-              // Bounds checking:
-              if (offsetGridIndex.x < 0 ||
-                offsetGridIndex.y < 0 ||
-                offsetGridIndex.z < 0 ||
-                gridStep < offsetGridIndex.x ||
-                gridStep < offsetGridIndex.y ||
-                gridStep < offsetGridIndex.z)
-                continue;
+  //     // Check 3 ranges of increasing size
+  //     // Note: Checking increasing ranges has n^3 complexity, as opposed to
+  //     // checking different levels which should have log(d) complexity, so should
+  //     // probably do that preemtively.
+  //     for (int r = 0; r < 3; ++r) {
+  //       for (int z = -r; z < r + 1; ++z) {
+  //         for (int y = -r; y < r + 1; y++) {
+  //           for (int x = -r; x < r + 1; x++) {
+  //             // Skip grids we've already accounted for
+  //             if (!(abs(x) == r || abs(y) == r || abs(z) == r))
+  //               continue;
 
-              uint index = offsetIndex + offsetGridIndex.x + offsetGridIndex.y * gridStep + offsetGridIndex.z * gridStep * gridStep;
-              if (0 < cells[index].count) {
-                vec3 cellPos = vec3(cells[index].pos.xyz) / float(cells[index].count * 1000);
-                float d = length(cellPos - vertexPosition.xyz);
-                if (d < dist) {
-                  dist = d;
-                  closestPos = cellPos;
-                  pCount = cells[index].count;
-                }
-              }
-            }
-          }
-        }
-        if (dist < 10000.0)
-          break;
-      }
+  //             ivec3 offsetGridIndex = ivec3(gridIndex.x + x, gridIndex.y + y, gridIndex.z + z);
+  //             // Bounds checking:
+  //             if (offsetGridIndex.x < 0 ||
+  //               offsetGridIndex.y < 0 ||
+  //               offsetGridIndex.z < 0 ||
+  //               gridStep < offsetGridIndex.x ||
+  //               gridStep < offsetGridIndex.y ||
+  //               gridStep < offsetGridIndex.z)
+  //               continue;
+
+  //             uint index = offsetIndex + offsetGridIndex.x + offsetGridIndex.y * gridStep + offsetGridIndex.z * gridStep * gridStep;
+  //             if (0 < cells[index].count) {
+  //               vec3 cellPos = vec3(cells[index].pos.xyz) / float(cells[index].count * 1000);
+  //               float d = length(cellPos - vertexPosition.xyz);
+  //               if (d < dist) {
+  //                 dist = d;
+  //                 closestPos = cellPos;
+  //                 pCount = cells[index].count;
+  //               }
+  //             }
+  //           }
+  //         }
+  //       }
+  //       if (dist < 10000.0)
+  //         break;
+  //     }
       
-      // If grid count was less than threshold, we don't need to go any deeper.
-      if (pCount < 10)
-        break;
-    }
+  //     // If grid count was less than threshold, we don't need to go any deeper.
+  //     if (pCount < 10)
+  //       break;
+  //   }
 
 
-    if (dist < 10000.0) {
-      vertexPosition.xyz = mix(vertexPosition.xyz, closestPos, clustering);
-    }
-  }
+  //   if (dist < 10000.0) {
+  //     vertexPosition.xyz = mix(vertexPosition.xyz, closestPos, clustering);
+  //   }
+  // }
 
 #ifdef INTERPOLATION
 	vertexPosition.xyz = mix(position.xyz,nextPosition.xyz,animationDelta);
