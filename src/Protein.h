@@ -56,6 +56,7 @@ namespace dynamol
 		struct HierchicalPoints {
 			glm::vec4 pos;
 			glm::vec4 parent;
+			float radius;
 		};
 		std::vector<HierchicalPoints> m_genAtomsDense;
 		std::vector<HierchicalPoints> m_hierarchyPoints;

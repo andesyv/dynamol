@@ -230,18 +230,21 @@ void Protein::load(const std::string& filename)
 	// Generate hierarchical points (LOD0):
 	m_hierarchyPoints.reserve(atom.size());
 	for (const auto& a : atom)
-		m_hierarchyPoints.emplace_back(a, glm::vec4{});
+		m_hierarchyPoints.emplace_back(a, glm::vec4{}, 1.7f);
 
 	// Generate LOD (for testing):
 	m_genAtomsDense.reserve(atom.size() * 10);
+	// Note: offset radius needs to be less than parent radius, otherwise child redius becomes negative.	
 	const auto offset = 4.0;
 	for (const auto& parent : atom) {
 		// Generate some particles with random offsets to the parent:
 		for (uint i{0}; i < 10; ++i) {
 			const auto r = [offset](){ return ((ran() % 1000 * 0.001) - 0.5) * offset; };
-			auto p = parent + static_cast<glm::vec4>(glm::dvec4{r(), r(), r(), 0.0});
+			const glm::vec3 posOffset{r(), r(), r()};
+			auto p = parent + glm::vec4{posOffset, 0.f};
 			// p.w = 1.0;
-			m_genAtomsDense.emplace_back(p, parent);
+			// radius = parentRadius - (position - parentPosition).length()
+			m_genAtomsDense.emplace_back(p, parent, 1.7f - glm::length(posOffset));
 		}
 	}
 

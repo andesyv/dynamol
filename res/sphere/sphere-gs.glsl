@@ -7,6 +7,8 @@
 
 #version 450
 
+in float vRadius[];
+
 uniform mat4 modelViewMatrix;
 uniform mat4 projectionMatrix;
 uniform float radiusScale;

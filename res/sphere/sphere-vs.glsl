@@ -4,6 +4,7 @@
 
 in vec4 position;
 in vec4 parentPosition;
+in float radius;
 #ifdef INTERPOLATION
 in vec4 nextPosition;
 #endif
@@ -16,6 +17,8 @@ uniform float clustering = 0.0;
 uniform uint gridScale = 2;
 uniform vec3 maxb;
 uniform vec3 minb;
+
+out float vRadius;
 
 struct Cell
 {
@@ -138,6 +141,8 @@ uint powi(uint x, uint p) {
 //#define ANIMATION
 void main()
 {
+  vRadius = radius;
+
 	vec4 vertexPosition = position;
 
   vertexPosition.xyz = mix(vertexPosition.xyz, parentPosition.xyz, clustering);
