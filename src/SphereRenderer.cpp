@@ -125,7 +125,7 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 	m_vaoQuad->unbind();
 
 	m_shaderSourceDefines = StaticStringSource::create("");
-	m_shaderDefines = NamedString::create("/defines.glsl", m_shaderSourceDefines.get());
+	m_shaderDefines = NamedString::create("/defines", m_shaderSourceDefines.get());
 
 	createShaderProgram("sphere", {
 			{ GL_VERTEX_SHADER,"./res/sphere/sphere-vs.glsl" },
@@ -645,6 +645,7 @@ void SphereRenderer::display()
 
 	static float replaceScaleParam{0.01f}, interpolation{0.f}, clustering{0.f};
 	static int startLODParam{1};
+	static bool bVisualizeOverlaps{false};
 
 	// user interface for manipulating rendering parameters
 	if (ImGui::BeginMenu("Renderer"))
@@ -790,6 +791,7 @@ void SphereRenderer::display()
 		ImGui::SliderFloat("Interpolation", &interpolation, 0.f, 1.f);
 		ImGui::SliderFloat("Clustering", &clustering, 0.f, 1.f);
 		ImGui::SliderInt("Start LOD", &startLODParam, 1, 4);
+		ImGui::Checkbox("Visualize overlaps", &bVisualizeOverlaps);
 		ImGui::EndMenu();
 	}
 
@@ -835,6 +837,9 @@ void SphereRenderer::display()
 
 	if (depthOfField)
 		defines += "#define DEPTHOFFIELD\n";
+
+	if (bVisualizeOverlaps)
+		defines += "#define VISUALIZE_OVERLAPS\n";
 
 	// Reload shaders if settings have changed
 	if (defines != m_shaderSourceDefines->string())
@@ -1083,7 +1088,8 @@ void SphereRenderer::display()
 	// Surface intersection pass
 	//////////////////////////////////////////////////////////////////////////
 	
-	m_surfaceFramebuffer->bind();
+	(bVisualizeOverlaps ? m_shadeFramebuffer : m_surfaceFramebuffer)->bind();
+	
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	glDepthMask(GL_TRUE);
 
@@ -1153,88 +1159,90 @@ void SphereRenderer::display()
 	m_residueColors->unbind(GL_UNIFORM_BUFFER);
 	m_elementColorsRadii->unbind(GL_UNIFORM_BUFFER);
 
-	m_surfaceFramebuffer->unbind();
+	if (!bVisualizeOverlaps) {
+		m_surfaceFramebuffer->unbind();
 
 
-	//////////////////////////////////////////////////////////////////////////
-	// Shading
-	//////////////////////////////////////////////////////////////////////////
-	m_shadeFramebuffer->bind();
-	glDepthMask(GL_FALSE);
+		//////////////////////////////////////////////////////////////////////////
+		// Shading
+		//////////////////////////////////////////////////////////////////////////
+		m_shadeFramebuffer->bind();
+		glDepthMask(GL_FALSE);
 
-	m_spherePositionTexture->bindActive(0);
-	m_sphereNormalTexture->bindActive(1);
-	m_sphereDiffuseTexture->bindActive(2);
-	m_surfacePositionTexture->bindActive(3);
-	m_surfaceNormalTexture->bindActive(4);
-	m_surfaceDiffuseTexture->bindActive(5);
-	m_depthTexture->bindActive(6);
-	m_ambientTexture->bindActive(7);
-	m_materialTextures[materialTextureIndex]->bindActive(8);
-	m_environmentTextures[environmentTextureIndex]->bindActive(9);
-	m_shadowColorTexture->bindActive(10);
-	m_shadowDepthTexture->bindActive(11);
+		m_spherePositionTexture->bindActive(0);
+		m_sphereNormalTexture->bindActive(1);
+		m_sphereDiffuseTexture->bindActive(2);
+		m_surfacePositionTexture->bindActive(3);
+		m_surfaceNormalTexture->bindActive(4);
+		m_surfaceDiffuseTexture->bindActive(5);
+		m_depthTexture->bindActive(6);
+		m_ambientTexture->bindActive(7);
+		m_materialTextures[materialTextureIndex]->bindActive(8);
+		m_environmentTextures[environmentTextureIndex]->bindActive(9);
+		m_shadowColorTexture->bindActive(10);
+		m_shadowDepthTexture->bindActive(11);
 
-	programShade->setUniform("modelViewMatrix", modelViewMatrix);
-	programShade->setUniform("projectionMatrix", projectionMatrix);
-	programShade->setUniform("modelViewProjection", modelViewProjectionMatrix);
-	programShade->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
-	programShade->setUniform("normalMatrix", normalMatrix);
-	programShade->setUniform("inverseNormalMatrix", inverseNormalMatrix);
-	programShade->setUniform("modelLightMatrix", modelLightMatrix);
-	programShade->setUniform("modelLightProjectionMatrix", modelLightProjectionMatrix);
-	programShade->setUniform("lightPosition", vec3(worldLightPosition));
-	programShade->setUniform("ambientMaterial", ambientMaterial);
-	programShade->setUniform("diffuseMaterial", diffuseMaterial);
-	programShade->setUniform("specularMaterial", specularMaterial);
-	programShade->setUniform("distanceBlending", distanceBlending);
-	programShade->setUniform("distanceScale", distanceScale);
-	programShade->setUniform("shininess", shininess);
-	programShade->setUniform("focusPosition", focusPosition);
-	programShade->setUniform("objectCenter", objectCenter);
-	programShade->setUniform("objectRadius", objectRadius);
+		programShade->setUniform("modelViewMatrix", modelViewMatrix);
+		programShade->setUniform("projectionMatrix", projectionMatrix);
+		programShade->setUniform("modelViewProjection", modelViewProjectionMatrix);
+		programShade->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
+		programShade->setUniform("normalMatrix", normalMatrix);
+		programShade->setUniform("inverseNormalMatrix", inverseNormalMatrix);
+		programShade->setUniform("modelLightMatrix", modelLightMatrix);
+		programShade->setUniform("modelLightProjectionMatrix", modelLightProjectionMatrix);
+		programShade->setUniform("lightPosition", vec3(worldLightPosition));
+		programShade->setUniform("ambientMaterial", ambientMaterial);
+		programShade->setUniform("diffuseMaterial", diffuseMaterial);
+		programShade->setUniform("specularMaterial", specularMaterial);
+		programShade->setUniform("distanceBlending", distanceBlending);
+		programShade->setUniform("distanceScale", distanceScale);
+		programShade->setUniform("shininess", shininess);
+		programShade->setUniform("focusPosition", focusPosition);
+		programShade->setUniform("objectCenter", objectCenter);
+		programShade->setUniform("objectRadius", objectRadius);
 
-	programShade->setUniform("spherePositionTexture", 0);
-	programShade->setUniform("sphereNormalTexture", 1);
-	programShade->setUniform("sphereDiffuseTexture", 2);
+		programShade->setUniform("spherePositionTexture", 0);
+		programShade->setUniform("sphereNormalTexture", 1);
+		programShade->setUniform("sphereDiffuseTexture", 2);
 
-	programShade->setUniform("surfacePositionTexture", 3);
-	programShade->setUniform("surfaceNormalTexture", 4);
-	programShade->setUniform("surfaceDiffuseTexture", 5);
+		programShade->setUniform("surfacePositionTexture", 3);
+		programShade->setUniform("surfaceNormalTexture", 4);
+		programShade->setUniform("surfaceDiffuseTexture", 5);
 
-	programShade->setUniform("depthTexture", 6);
-	programShade->setUniform("ambientTexture", 7);
-	programShade->setUniform("materialTexture", 8);
-	programShade->setUniform("environmentTexture", 9);
-	programShade->setUniform("shadowColorTexture", 10);
-	programShade->setUniform("shadowDepthTexture", 11);
+		programShade->setUniform("depthTexture", 6);
+		programShade->setUniform("ambientTexture", 7);
+		programShade->setUniform("materialTexture", 8);
+		programShade->setUniform("environmentTexture", 9);
+		programShade->setUniform("shadowColorTexture", 10);
+		programShade->setUniform("shadowDepthTexture", 11);
 
-	programShade->setUniform("environment", environmentMapping);
-	programShade->setUniform("maximumCoCRadius", maximumCoCRadius);
-	programShade->setUniform("aparture", aparture);
-	programShade->setUniform("focalDistance", focalDistance);
-	programShade->setUniform("focalLength", focalLength);
-	programShade->setUniform("backgroundColor", viewer()->backgroundColor());
+		programShade->setUniform("environment", environmentMapping);
+		programShade->setUniform("maximumCoCRadius", maximumCoCRadius);
+		programShade->setUniform("aparture", aparture);
+		programShade->setUniform("focalDistance", focalDistance);
+		programShade->setUniform("focalLength", focalLength);
+		programShade->setUniform("backgroundColor", viewer()->backgroundColor());
 
 
-	m_vaoQuad->bind();
-	programShade->use();
-	m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
-	programShade->release();
-	m_vaoQuad->unbind();
+		m_vaoQuad->bind();
+		programShade->use();
+		m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
+		programShade->release();
+		m_vaoQuad->unbind();
 
-	m_shadowDepthTexture->unbindActive(11);
-	m_shadowColorTexture->unbindActive(10);
-	m_environmentTextures[environmentTextureIndex]->unbindActive(9);
-	m_materialTextures[materialTextureIndex]->unbindActive(8);
-	m_ambientTexture->unbindActive(7);
-	m_depthTexture->unbindActive(6);
-	m_surfaceDiffuseTexture->unbindActive(5);
-	m_surfaceNormalTexture->unbindActive(4);
-	m_surfacePositionTexture->unbindActive(3);
-	m_sphereDiffuseTexture->unbindActive(2);
-	m_sphereNormalTexture->unbindActive(1);
-	m_spherePositionTexture->unbindActive(0);
+		m_shadowDepthTexture->unbindActive(11);
+		m_shadowColorTexture->unbindActive(10);
+		m_environmentTextures[environmentTextureIndex]->unbindActive(9);
+		m_materialTextures[materialTextureIndex]->unbindActive(8);
+		m_ambientTexture->unbindActive(7);
+		m_depthTexture->unbindActive(6);
+		m_surfaceDiffuseTexture->unbindActive(5);
+		m_surfaceNormalTexture->unbindActive(4);
+		m_surfacePositionTexture->unbindActive(3);
+		m_sphereDiffuseTexture->unbindActive(2);
+		m_sphereNormalTexture->unbindActive(1);
+		m_spherePositionTexture->unbindActive(0);
+	}
 
 	m_shadeFramebuffer->unbind();
 

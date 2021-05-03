@@ -1,6 +1,6 @@
 #version 450
 #extension GL_ARB_shading_language_include : require
-#include "/defines.glsl"
+#include "/defines"
 #include "/globals.glsl"
 
 #define BIAS 0.001
@@ -41,6 +41,9 @@ uniform float var2 = 0.0;
 uniform float var3 = 0.0;
 
 in vec4 gFragmentPosition;
+#ifdef VISUALIZE_OVERLAPS
+layout(location = 0) out vec4 fragColor;
+#endif
 out vec4 surfacePosition;
 out vec4 surfaceNormal;
 out vec4 surfaceDiffuse;
@@ -166,6 +169,11 @@ void main()
 		indices[entryCount++] = offset;
 		offset = intersections[offset].previous;
 	}
+
+#ifdef VISUALIZE_OVERLAPS
+	fragColor = vec4(vec3(entryCount) / maxEntries, 1.0);
+	return;
+#endif
 
 	// Exit just in case (technically should never arrive here because offset would be 0)
 	if (entryCount == 0)
