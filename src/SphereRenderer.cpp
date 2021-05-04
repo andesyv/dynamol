@@ -869,21 +869,26 @@ void SphereRenderer::display()
 	const auto f1 = [=](float t) -> float {
 		if (t < 0.5)
 			return bezier({0.f, rLOD0, l(0.5f)}, t * 2.f);
+			// return 0.f;
 		else
 			return l(t);
+		// return rLOD1 * t; // linear
 	};
 
 	struct LOD {
 		std::unique_ptr<globjects::VertexArray>& vao;
 		const int vCount;
 		std::function<float(float)> radius;
+		std::function<float(float)> clustering;
 	};
 
 	// using LODT = std::tuple<std::unique_ptr<globjects::VertexArray>&, int&, decltype(f0)&>;
 
 	const auto LODs = std::to_array<LOD>({
-		{m_vao, vertexCount, f0},	// LOD0
-		{m_denseVAO, m_denseVertexCount, f1}, // LOD1
+		{m_vao, vertexCount, f0, [](float t){ return 0.f; }},	// LOD0
+		{m_denseVAO, m_denseVertexCount, f1, [](float t){
+			return 1.f - t/*t < 0.5 ? 0.f : 2.f - t * 2.f*/;
+		}}, // LOD1
 	});
 
 	// if (timestepCount > 0)
@@ -917,7 +922,7 @@ void SphereRenderer::display()
 	programGrid->setUniform("minb", bounds.first);
 	programGrid->setUniform("maxb", bounds.second);
 
-	auto& [gridVAO, gridVCount, _] = LODs[0];
+	auto [gridVAO, gridVCount] = std::tie(LODs[0].vao, LODs[0].vCount);
 
 	programGrid->use();
 	glPointSize(10.f);
@@ -1003,13 +1008,13 @@ void SphereRenderer::display()
 	m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
 
 	for (uint i{0}; i < 2; ++i) {
-		auto& [vao, vCount, radiusFunc] = LODs[i];
+		auto& [vao, vCount, radiusFunc, cluster] = LODs[i];
 		const auto scale = radiusFunc(interpolation);
 
 		programSphere->setUniform("radiusScale", scale);
 		// programSpawn->setUniform("outerRadius", ATOM_SIZE * scale);
 		programSphere->setUniform("clipRadiusScale", radiusScale * scale);
-		programSphere->setUniform("clustering", i == 0 ? 0.f : 1.f - interpolation);
+		programSphere->setUniform("clustering", cluster(interpolation));
 
 
 		vao->drawArrays(GL_POINTS, 0, vCount);
@@ -1061,13 +1066,13 @@ void SphereRenderer::display()
 	programSpawn->setUniform("maxb", bounds.second);
 
 	for (uint i{0}; i < 2; ++i) {
-		auto& [vao, vCount, radiusFunc] = LODs[i];
+		auto& [vao, vCount, radiusFunc, cluster] = LODs[i];
 		const auto scale = radiusFunc(interpolation);
 
 		programSpawn->setUniform("radiusScale", radiusScale * scale);
 		programSpawn->setUniform("outerRadius", scale);
 		programSpawn->setUniform("clipRadiusScale", radiusScale * scale);
-		programSpawn->setUniform("clustering", i == 0 ? 0.f : 1.f - interpolation);
+		programSpawn->setUniform("clustering", cluster(interpolation));
 
 
 		vao->drawArrays(GL_POINTS, 0, vCount);
