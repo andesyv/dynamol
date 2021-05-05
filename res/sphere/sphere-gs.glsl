@@ -13,6 +13,8 @@ uniform mat4 modelViewMatrix;
 uniform mat4 projectionMatrix;
 uniform float radiusScale;
 uniform float outerRadius = 1.7;
+uniform float individualSharpness = 1.0;
+uniform float weight = 1.0;
 uniform float clipRadiusScale;
 uniform float nearPlaneZ = -0.125;
 
@@ -30,6 +32,8 @@ out vec4 gFragmentPosition;
 flat out vec4 gSpherePosition;
 flat out float gSphereRadius;
 flat out float gOuterRadius;
+flat out float gSharpness;
+flat out float gWeight;
 flat out uint gSphereId;
 
 /** 2D-line from point and direction */
@@ -252,6 +256,8 @@ void main()
 	gSpherePosition = gl_in[0].gl_Position;
 	gSphereRadius = sphereRadius;
     gOuterRadius = outerRadius;
+    gSharpness = individualSharpness;
+    gWeight = weight;
 
 	vec4 c = modelViewMatrix * vec4(gl_in[0].gl_Position.xyz,1.0);
 	

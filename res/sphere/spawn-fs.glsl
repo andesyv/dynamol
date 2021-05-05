@@ -7,6 +7,8 @@ in vec4 gFragmentPosition;
 flat in vec4 gSpherePosition;
 flat in float gSphereRadius;
 flat in float gOuterRadius;
+flat in float gSharpness;
+flat in float gWeight;
 flat in uint gSphereId;
 
 layout(binding = 0) uniform sampler2D positionTexture;
@@ -20,6 +22,8 @@ struct BufferEntry
 	uint id;
 	uint previous;
 	float radius;
+	float sharpness;
+	float weight;
 };
 
 layout(binding = 1) uniform atomic_uint count;
@@ -101,6 +105,8 @@ void main()
 	entry.previous = prev;
 	
 	entry.radius = gOuterRadius;
+	entry.sharpness = gSharpness;
+	entry.weight = gWeight;
 
 	intersections[index] = entry;
 

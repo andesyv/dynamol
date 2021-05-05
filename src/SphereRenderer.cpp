@@ -647,6 +647,9 @@ void SphereRenderer::display()
 	static int startLODParam{1};
 	static bool bVisualizeOverlaps{false};
 
+	static float rLOD0{1.7f}, rLOD1{1.f};
+	static float sharpnessOffset{1.f};
+
 	// user interface for manipulating rendering parameters
 	if (ImGui::BeginMenu("Renderer"))
 	{
@@ -790,6 +793,9 @@ void SphereRenderer::display()
 	if (ImGui::BeginMenu("Other Shit")) {
 		ImGui::SliderFloat("Interpolation", &interpolation, 0.f, 1.f);
 		ImGui::SliderFloat("Clustering", &clustering, 0.f, 1.f);
+		ImGui::SliderFloat("LOD0 radius", &rLOD0, 0.f, 10.f);
+		ImGui::SliderFloat("LOD1 radius", &rLOD1, 0.f, 10.f);
+		ImGui::SliderFloat("Interpolation sharpness", &sharpnessOffset, 0.1f, 32.0f);
 		ImGui::SliderInt("Start LOD", &startLODParam, 1, 4);
 		ImGui::Checkbox("Visualize overlaps", &bVisualizeOverlaps);
 		ImGui::EndMenu();
@@ -855,39 +861,28 @@ void SphereRenderer::display()
 	// vertexBinding->setFormat(4, GL_FLOAT);
 	// m_vao->enable(0);
 
-	const auto rLOD0{1.7f}, rLOD1{1.f};
-
 	const auto l = [=](float t){
 		return std::lerp(rLOD0, rLOD1, t);
-	};
-	const auto f0 = [=](float t) -> float {
-		if (t < 0.5)
-			return l(t);
-		else
-			return bezier({l(0.5f), rLOD1, 0.f}, t * 2.f - 1.f);
-	};
-	const auto f1 = [=](float t) -> float {
-		if (t < 0.5)
-			return bezier({0.f, rLOD0, l(0.5f)}, t * 2.f);
-			// return 0.f;
-		else
-			return l(t);
-		// return rLOD1 * t; // linear
 	};
 
 	struct LOD {
 		std::unique_ptr<globjects::VertexArray>& vao;
 		const int vCount;
-		std::function<float(float)> radius;
+		float radius;
 		std::function<float(float)> clustering;
+		std::function<float(float)> sharpness;
 	};
 
 	// using LODT = std::tuple<std::unique_ptr<globjects::VertexArray>&, int&, decltype(f0)&>;
 
 	const auto LODs = std::to_array<LOD>({
-		{m_vao, vertexCount, f0, [](float t){ return 0.f; }},	// LOD0
-		{m_denseVAO, m_denseVertexCount, f1, [](float t){
-			return 1.f - t/*t < 0.5 ? 0.f : 2.f - t * 2.f*/;
+		{m_vao, vertexCount, rLOD0, [](float t){ return 0.f; }, [](float t){
+			return sharpness;
+		}},	// LOD0
+		{m_denseVAO, m_denseVertexCount, rLOD1, [](float t){
+			return 0.f/*t < 0.5 ? 0.f : 2.f - t * 2.f*/;
+		}, [](float t){
+			return sharpness;
 		}}, // LOD1
 	});
 
@@ -1008,13 +1003,14 @@ void SphereRenderer::display()
 	m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
 
 	for (uint i{0}; i < 2; ++i) {
-		auto& [vao, vCount, radiusFunc, cluster] = LODs[i];
-		const auto scale = radiusFunc(interpolation);
+		auto& [vao, vCount, scale, cluster, sharp] = LODs[i];
 
 		programSphere->setUniform("radiusScale", scale);
 		// programSpawn->setUniform("outerRadius", ATOM_SIZE * scale);
 		programSphere->setUniform("clipRadiusScale", radiusScale * scale);
 		programSphere->setUniform("clustering", cluster(interpolation));
+		programSphere->setUniform("individualSharpness", sharp(interpolation));
+		programSphere->setUniform("weight", i == 0 ? 1.f - interpolation : interpolation);
 
 
 		vao->drawArrays(GL_POINTS, 0, vCount);
@@ -1066,13 +1062,14 @@ void SphereRenderer::display()
 	programSpawn->setUniform("maxb", bounds.second);
 
 	for (uint i{0}; i < 2; ++i) {
-		auto& [vao, vCount, radiusFunc, cluster] = LODs[i];
-		const auto scale = radiusFunc(interpolation);
+		auto& [vao, vCount, scale, cluster, sharp] = LODs[i];
 
 		programSpawn->setUniform("radiusScale", radiusScale * scale);
 		programSpawn->setUniform("outerRadius", scale);
 		programSpawn->setUniform("clipRadiusScale", radiusScale * scale);
 		programSpawn->setUniform("clustering", cluster(interpolation));
+		programSpawn->setUniform("individualSharpness", sharp(interpolation));
+		programSpawn->setUniform("weight", i == 0 ? 1.f - interpolation : interpolation);
 
 
 		vao->drawArrays(GL_POINTS, 0, vCount);

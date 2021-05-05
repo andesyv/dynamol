@@ -88,6 +88,8 @@ struct BufferEntry
 	uint id;
 	uint previous;
 	float radius;
+	float sharpness;
+	float weight;
 };
 
 struct Cell
@@ -297,6 +299,8 @@ void main()
 
 						vec3 aj = intersections[ij].center;
 						float rj = intersections[ij].radius; // elements[elementId].radius;
+						float weight = intersections[ij].weight;
+						// float sphereSharpness = intersections[ij].sharpness;
 
 						vec3 atomOffset = currentPosition.xyz-aj;
 						float atomDistance = length(atomOffset)/rj;
@@ -304,8 +308,8 @@ void main()
 						float atomValue = exp(-s*atomDistance*atomDistance);
 						vec3 atomNormal = atomValue*normalize(atomOffset);
 						
-						sumValue += atomValue;
-						sumNormal += atomNormal;
+						sumValue += atomValue * weight;
+						sumNormal += atomNormal * weight;
 
 #ifdef COLORING
 						vec3 cj = vec3(1.0,1.0,1.0);
@@ -453,6 +457,7 @@ void main()
 
 	if (closestPosition.w >= 65535.0f)
 		discard;
+	
 
 #ifdef NORMAL		
 	vec3 N = normalize(closestNormal);
