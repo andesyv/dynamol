@@ -30,6 +30,7 @@ uniform sampler2D environmentTexture;
 uniform sampler2D bumpTexture;
 uniform sampler2D materialTexture;
 uniform usampler2D offsetTexture;
+layout(binding = 7) uniform sampler2D backPositionTexture;
 
 uniform uint gridScale = 1;
 uniform uint gridDepth = 1;
@@ -148,6 +149,7 @@ void main()
 		discard;
 
 	vec4 position = texelFetch(positionTexture,ivec2(gl_FragCoord.xy),0);
+	vec4 backPosition = texelFetch(backPositionTexture, ivec2(gl_FragCoord.xy), 0);
 	vec4 normal = texelFetch(normalTexture,ivec2(gl_FragCoord.xy),0);
 
 	vec4 fragCoord = gFragmentPosition;

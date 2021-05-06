@@ -6,39 +6,16 @@ uniform mat4 inverseModelViewProjectionMatrix;
 in vec4 gFragmentPosition;
 flat in vec4 gSpherePosition;
 flat in float gSphereRadius;
-flat in float gOuterRadius;
-flat in float gSharpness;
-flat in float gWeight;
 flat in uint gSphereId;
 
-layout(binding = 0) uniform sampler2D positionTexture;
-layout(r32ui, binding = 0) uniform uimage2D offsetImage;
-layout(binding = 1) uniform sampler2D positionLevelTexture;
-
-struct BufferEntry
-{
-	float near;
-	float far;
-	vec3 center;
-	uint id;
-	uint previous;
-	float radius;
-	float sharpness;
-	float weight;
-};
-
-layout(binding = 1) uniform atomic_uint count;
-
-layout(std430, binding = 1) buffer intersectionBuffer
-{
-	BufferEntry intersections[];
-};
+out vec4 fragPosition;
 
 struct Sphere
 {			
 	bool hit;
 	vec3 near;
 	vec3 far;
+	vec3 normal;
 };
 																					
 Sphere calcSphereIntersection(float r, vec3 origin, vec3 center, vec3 line)
@@ -53,14 +30,16 @@ Sphere calcSphereIntersection(float r, vec3 origin, vec3 center, vec3 line)
 		float ds = -loc - sqrt(under_square_root);
 		vec3 near = origin+min(da, ds) * l;
 		vec3 far = origin+max(da, ds) * l;
+		vec3 normal = (near - center);
 
-		return Sphere(true, near, far);
+		return Sphere(true, near, far, normal);
 	}
 	else
 	{
-		return Sphere(false, vec3(0), vec3(0));
+		return Sphere(false, vec3(0), vec3(0), vec3(0));
 	}
 }
+
 float calcDepth(vec3 pos)
 {
 	float far = gl_DepthRange.far; 
@@ -88,28 +67,7 @@ void main()
 	if (!sphere.hit)
 		discard;
 
-	vec4 position = texelFetch(positionTexture,ivec2(gl_FragCoord.xy),0);
-	BufferEntry entry;
-	
-	entry.near = length(sphere.near.xyz-near.xyz);
-	
-	if (entry.near > position.w)
-		discard;	
-
-	uint index = atomicCounterIncrement(count);
-	uint prev = imageAtomicExchange(offsetImage,ivec2(gl_FragCoord.xy),index);
-
-	entry.far = length(sphere.far.xyz-near.xyz);
-
-	entry.center = gSpherePosition.xyz;
-	entry.id = gSphereId;
-	entry.previous = prev;
-	
-	entry.radius = gOuterRadius;
-	entry.sharpness = gSharpness;
-	entry.weight = gWeight;
-
-	intersections[index] = entry;
-
-	discard;
+	float depth = calcDepth(sphere.near.xyz);
+	fragPosition = vec4(sphere.near.xyz,length(sphere.near.xyz-near.xyz));
+	gl_FragDepth = depth;
 }
