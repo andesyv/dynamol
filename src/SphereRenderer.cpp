@@ -288,6 +288,13 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 	m_sphereBackPositionTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	m_sphereBackPositionTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
+	m_sphereMiddlePositionTexture = Texture::create(GL_TEXTURE_2D);
+	m_sphereMiddlePositionTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	m_sphereMiddlePositionTexture->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	m_sphereMiddlePositionTexture->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	m_sphereMiddlePositionTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	m_sphereMiddlePositionTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
 	m_sphereLOD0PositionTexture = Texture::create(GL_TEXTURE_2D);
 	m_sphereLOD0PositionTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	m_sphereLOD0PositionTexture->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -330,6 +337,13 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 	m_sphereBackNormalTexture->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	m_sphereBackNormalTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	m_sphereBackNormalTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+	
+	m_sphereMiddleNormalTexture = Texture::create(GL_TEXTURE_2D);
+	m_sphereMiddleNormalTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	m_sphereMiddleNormalTexture->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	m_sphereMiddleNormalTexture->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	m_sphereMiddleNormalTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	m_sphereMiddleNormalTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
 	m_surfacePositionTexture = Texture::create(GL_TEXTURE_2D);
 	m_surfacePositionTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -472,8 +486,10 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 	m_sphereSplitFramebuffer->attachTexture(GL_COLOR_ATTACHMENT1, m_sphereBackPositionTexture.get());
 	m_sphereSplitFramebuffer->attachTexture(GL_COLOR_ATTACHMENT2, m_sphereNormalTexture.get());
 	m_sphereSplitFramebuffer->attachTexture(GL_COLOR_ATTACHMENT3, m_sphereBackNormalTexture.get());
+	m_sphereSplitFramebuffer->attachTexture(GL_COLOR_ATTACHMENT4, m_sphereMiddlePositionTexture.get());
+	m_sphereSplitFramebuffer->attachTexture(GL_COLOR_ATTACHMENT5, m_sphereMiddleNormalTexture.get());
 	m_sphereSplitFramebuffer->attachTexture(GL_DEPTH_ATTACHMENT, m_depthTexture.get());
-	m_sphereSplitFramebuffer->setDrawBuffers({ GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3 });
+	m_sphereSplitFramebuffer->setDrawBuffers({ GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3, GL_COLOR_ATTACHMENT4, GL_COLOR_ATTACHMENT5 });
 
 	m_surfaceFramebuffer = Framebuffer::create();
 	m_surfaceFramebuffer->attachTexture(GL_COLOR_ATTACHMENT0, m_surfacePositionTexture.get());
@@ -974,7 +990,7 @@ void SphereRenderer::display()
 	// vertexBinding->setBuffer(m_vertices[currentTimestep].get(), 0, sizeof(vec4));
 	// vertexBinding->setFormat(4, GL_FLOAT);
 	// m_vao->enable(0);
-
+	
 	const auto l = [=](float t){
 		return std::lerp(rLOD0, rLOD1, t);
 	};
@@ -1117,7 +1133,7 @@ void SphereRenderer::display()
 
 	for (uint i{0}; i < 2; ++i) {
 		auto& [vao, vCount, scale, cluster, sharp] = LODs[i];
-		const auto& framebuffer = i == 0 ? m_sphereLOD0Framebuffer : m_sphereLOD1Framebuffer;
+		auto framebuffer = (i == 0 ? m_sphereLOD0Framebuffer : m_sphereLOD1Framebuffer).get();
 		framebuffer->bind();
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1149,6 +1165,7 @@ void SphereRenderer::display()
 	programFramebufferSplitting->use();
 
 	programFramebufferSplitting->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
+	programFramebufferSplitting->setUniform("interpolation", interpolation);
 
 	m_sphereLOD0PositionTexture->bindActive(0);
 	m_sphereLOD1PositionTexture->bindActive(1);
@@ -1254,7 +1271,7 @@ void SphereRenderer::display()
 	m_elementColorsRadii->bindBase(GL_UNIFORM_BUFFER, 0);
 	m_residueColors->bindBase(GL_UNIFORM_BUFFER, 1);
 	m_chainColors->bindBase(GL_UNIFORM_BUFFER, 2);
-	m_sphereLevelPositionTexture->bindActive(1);
+	m_sphereMiddlePositionTexture->bindActive(1);
 	
 	programSpawn->use();
 	
@@ -1280,6 +1297,7 @@ void SphereRenderer::display()
 		programSpawn->setUniform("clustering", cluster(interpolation));
 		programSpawn->setUniform("individualSharpness", sharp(interpolation));
 		programSpawn->setUniform("weight", i == 0 ? 1.f - interpolation : interpolation);
+		programSpawn->setUniform("interpolation", interpolation);
 
 
 		vao->drawArrays(GL_POINTS, 0, vCount);
@@ -1287,7 +1305,7 @@ void SphereRenderer::display()
 		
 	programSpawn->release();
 	
-	m_sphereLevelPositionTexture->unbindActive(1);
+	m_sphereMiddlePositionTexture->unbindActive(1);
 	m_spherePositionTexture->unbindActive(0);
 	m_intersectionCount->unbind(GL_ATOMIC_COUNTER_BUFFER);
 	m_intersectionBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
@@ -1302,6 +1320,7 @@ void SphereRenderer::display()
 	//////////////////////////////////////////////////////////////////////////
 	
 	(bVisualizeOverlaps ? m_shadeFramebuffer : m_surfaceFramebuffer)->bind();
+	// Framebuffer::defaultFBO()->bind();
 	
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	glDepthMask(GL_TRUE);
@@ -1320,6 +1339,9 @@ void SphereRenderer::display()
 	m_intersectionCount->bindBase(GL_ATOMIC_COUNTER_BUFFER, 1);
 	m_statisticsBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 2);
 	m_sphereBackPositionTexture->bindActive(7);
+	m_sphereBackNormalTexture->bindActive(8);
+	m_sphereMiddlePositionTexture->bindActive(9);
+	m_sphereMiddleNormalTexture->bindActive(10);
 
 	programSurface->setUniform("modelViewMatrix", modelViewMatrix);
 	programSurface->setUniform("projectionMatrix", projectionMatrix);
@@ -1362,6 +1384,9 @@ void SphereRenderer::display()
 	m_intersectionBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
 	m_intersectionCount->unbind(GL_ATOMIC_COUNTER_BUFFER);
 
+	m_sphereMiddleNormalTexture->unbindActive(10);
+	m_sphereMiddlePositionTexture->unbindActive(9);
+	m_sphereBackNormalTexture->unbindActive(8);
 	m_sphereBackPositionTexture->unbindActive(7);
 	m_materialTextures[materialTextureIndex]->unbindActive(6);
 	m_bumpTextures[bumpTextureIndex]->unbindActive(5);
@@ -1464,10 +1489,15 @@ void SphereRenderer::display()
 
 
 	// Draw test square
+	// m_shadeFramebuffer->bind();
 	// glClearDepth(1.0f);
-	// glClearColor(0.2, 0.3, 0.5, 1.0f);
-	// glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	// glClearColor(0.8, 0.3, 0.5, 0.0f);
 	// glDisable(GL_DEPTH_TEST);
+	// glDepthFunc(GL_ALWAYS);
+	// glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	// glDepthMask(GL_TRUE);
+	// glDepthFunc(GL_ALWAYS);
+	// glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	
 	// vertexBinding = m_triangleVAO->binding(1);
@@ -1494,14 +1524,19 @@ void SphereRenderer::display()
 	// programTest->use();
 
 	// m_spherePositionTexture->bindActive(0);
-	// m_offsetTexture->bindActive(1);
-	// // programTest->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
+	// m_sphereBackPositionTexture->bindActive(1);
+	// // m_offsetTexture->bindActive(1);
+	// programTest->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
+	// programTest->setUniform("interpolation", interpolation);
 	// // glPointSize(10.f);
 	// m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
 	// programTest->release();
 
-	// m_offsetTexture->unbindActive(1);
+	// // m_offsetTexture->unbindActive(1);
+	// m_sphereBackPositionTexture->unbindActive(1);
 	// m_spherePositionTexture->unbindActive(0);
+
+	// m_shadeFramebuffer->unbind();
 
 	if (viewportSize == viewer()->viewportSize())
 	{

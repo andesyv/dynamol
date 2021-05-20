@@ -61,12 +61,14 @@ namespace dynamol
 		std::unique_ptr<globjects::Texture> m_spherePositionTexture{nullptr},
 									m_sphereLevelPositionTexture{nullptr},
 									m_sphereBackPositionTexture{nullptr},
+									m_sphereMiddlePositionTexture{nullptr},
 									m_sphereLOD0PositionTexture{nullptr},
 									m_sphereLOD1PositionTexture{nullptr};
 		std::unique_ptr<globjects::Texture> m_sphereNormalTexture = nullptr;
 		std::unique_ptr<globjects::Texture> m_sphereLOD0NormalTexture{nullptr},
 											m_sphereLOD1NormalTexture{nullptr},
-											m_sphereBackNormalTexture{nullptr};
+											m_sphereBackNormalTexture{nullptr},
+											m_sphereMiddleNormalTexture{nullptr};
 		std::unique_ptr<globjects::Texture> m_surfacePositionTexture = nullptr;
 		std::unique_ptr<globjects::Texture> m_surfaceNormalTexture = nullptr;
 		std::unique_ptr<globjects::Texture> m_sphereDiffuseTexture = nullptr;

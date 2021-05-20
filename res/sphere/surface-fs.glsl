@@ -31,6 +31,9 @@ uniform sampler2D bumpTexture;
 uniform sampler2D materialTexture;
 uniform usampler2D offsetTexture;
 layout(binding = 7) uniform sampler2D backPositionTexture;
+layout(binding = 8) uniform sampler2D backNormalTexture;
+layout(binding = 9) uniform sampler2D middlePositionTexture;
+layout(binding = 10) uniform sampler2D middleNormalTexture;
 
 uniform uint gridScale = 1;
 uniform uint gridDepth = 1;
@@ -49,6 +52,7 @@ out vec4 surfacePosition;
 out vec4 surfaceNormal;
 out vec4 surfaceDiffuse;
 // out vec4 sphereDiffuse;
+// out vec4 fragColor;
 
 struct Element
 {
@@ -149,8 +153,9 @@ void main()
 		discard;
 
 	vec4 position = texelFetch(positionTexture,ivec2(gl_FragCoord.xy),0);
-	vec4 backPosition = texelFetch(backPositionTexture, ivec2(gl_FragCoord.xy), 0);
+	vec4 middlePosition = texelFetch(middlePositionTexture, ivec2(gl_FragCoord.xy), 0);
 	vec4 normal = texelFetch(normalTexture,ivec2(gl_FragCoord.xy),0);
+	vec4 middleNormal = texelFetch(middleNormalTexture,ivec2(gl_FragCoord.xy),0);
 
 	vec4 fragCoord = gFragmentPosition;
 	fragCoord /= fragCoord.w;
@@ -183,8 +188,11 @@ void main()
 	if (entryCount == 0)
 		discard;
 
-	vec4 closestPosition = position;
-	vec3 closestNormal = normal.xyz;
+	vec4 closestPosition = middlePosition;
+	vec3 closestNormal = middleNormal.xyz;
+
+	// fragColor = vec4(vec3(closestPosition.w / 10.0 / 10.0), 1.0);
+	// return;
 
 	float sharpnessFactor = 1.0;
 	vec3 ambientColor = ambientMaterial;
@@ -223,6 +231,8 @@ void main()
 #endif
 
 	uint startIndex = 0;
+
+	uint stepCount = 0;
 
 	// selection sort
 	for(uint currentIndex = 0; currentIndex < entryCount; currentIndex++)
@@ -267,21 +277,21 @@ void main()
 				float maximumDistance = (farDistance-nearDistance)+1.0;
 				float surfaceDistance = 1.0;
 
-				vec4 rayOrigin = vec4(near.xyz+V*nearDistance,nearDistance);
+				vec4 rayOrigin = vec4(near.xyz,0.);
 				vec4 rayDirection = vec4(V,1.0);
 				vec4 currentPosition;
 				
-				vec4 candidatePosition = rayOrigin;
+				vec4 candidatePosition = rayOrigin + rayDirection * nearDistance;
 				vec3 candidateNormal = vec3(0.0);
 				vec3 candidateColor = vec3(0.0);
 				float candidateValue = 0.0;
 
-				float minimumDistance = maximumDistance;
+				float minimumDistance = farDistance;
 
 				uint currentStep = 0;			
-				float t = 0.0;
+				float t = nearDistance;
 
-				while (++currentStep <= maximumSteps && t <= maximumDistance)
+				while (++currentStep <= maximumSteps && t <= farDistance)
 				{    
 					currentPosition = rayOrigin + rayDirection*t;
 
@@ -342,6 +352,11 @@ void main()
 					}
 					
 					surfaceDistance = sqrt(-log(sumValue) / (s))-1.0;
+
+					// if (12 < currentStep) {
+					// 	fragColor = vec4(vec3(surfaceDistance / 10.0), 1.0);
+					// 	return;
+					// }
 
 					/*
 					/// Adjust surface based on higher LOD
@@ -434,9 +449,12 @@ void main()
 					// Benjamin Keinert, Henry Sch�fer, Johann Kornd�rfer, Urs Ganse, and Marc Stamminger.
 					// Enhanced Sphere Tracing. Proceedings of Smart Tools and Apps for Graphics (Eurographics Italian Chapter Conference), pp. 1--8, 2014. 
 					// http://dx.doi.org/10.2312/stag.20141233
-					t += surfaceDistance*omega;
+					// t += surfaceDistance*omega;
+					t += surfaceDistance;
+					++stepCount;
 				}
 				
+				// Only check for new closest position if all iterations passed (if t never overshot farDistance)
 				if (currentStep > maximumSteps)
 				{
 					if (candidatePosition.w <= closestPosition.w)
@@ -495,6 +513,11 @@ void main()
 	closestNormal.xyz = normalMatrix*closestNormal.xyz;
 	closestNormal.xyz = normalize(closestNormal.xyz);
 	surfaceNormal = vec4(closestNormal.xyz,cp.z);
+
+	// vec3 col = vec3(1.0 - closestPosition.w / 20.0);
+	// float phong = max(dot(closestNormal.xyz, vec3(0, .0, 1.)), 0.15);
+	// // fragColor = vec4(vec3(entryCount) / 128.0, 1.0);
+	// fragColor = vec4(phong * col, 1.0);
 
 #ifdef MATERIAL
 	vec3 materialColor = texture( materialTexture , closestNormal.xy*0.5+0.5 ).rgb;

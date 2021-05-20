@@ -2,6 +2,7 @@
 
 uniform mat4 modelViewProjectionMatrix;
 uniform mat4 inverseModelViewProjectionMatrix;
+uniform float interpolation = 0.0;
 
 in vec4 gFragmentPosition;
 flat in vec4 gSpherePosition;
@@ -13,7 +14,7 @@ flat in uint gSphereId;
 
 layout(binding = 0) uniform sampler2D positionTexture;
 layout(r32ui, binding = 0) uniform uimage2D offsetImage;
-layout(binding = 1) uniform sampler2D positionLevelTexture;
+layout(binding = 1) uniform sampler2D positionMiddleTexture;
 
 struct BufferEntry
 {
@@ -88,7 +89,7 @@ void main()
 	if (!sphere.hit)
 		discard;
 
-	vec4 position = texelFetch(positionTexture,ivec2(gl_FragCoord.xy),0);
+	vec4 position = texelFetch(positionMiddleTexture,ivec2(gl_FragCoord.xy),0);
 	BufferEntry entry;
 	
 	entry.near = length(sphere.near.xyz-near.xyz);
