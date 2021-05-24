@@ -238,6 +238,12 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 		{ GL_FRAGMENT_SHADER,"./res/scaling/fb-split-fs.glsl" },
 	});
 
+	createShaderProgram("fb-split-blit", {
+		{ GL_VERTEX_SHADER, "./res/sphere/image-vs.glsl"},
+		{ GL_GEOMETRY_SHADER, "./res/sphere/image-gs.glsl"},
+		{ GL_FRAGMENT_SHADER,"./res/scaling/fb-blit-fs.glsl" },
+	});
+
 	m_framebufferSize = viewer->viewportSize();
 
 	m_depthTexture = Texture::create(GL_TEXTURE_2D);
@@ -483,14 +489,10 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 	m_sphereLOD1Framebuffer->setDrawBuffers({ GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 });
 
 	m_sphereSplitFramebuffer = Framebuffer::create();
-	m_sphereSplitFramebuffer->attachTexture(GL_COLOR_ATTACHMENT0, m_spherePositionTexture.get());
-	m_sphereSplitFramebuffer->attachTexture(GL_COLOR_ATTACHMENT1, m_sphereBackPositionTexture.get());
-	m_sphereSplitFramebuffer->attachTexture(GL_COLOR_ATTACHMENT2, m_sphereNormalTexture.get());
-	m_sphereSplitFramebuffer->attachTexture(GL_COLOR_ATTACHMENT3, m_sphereBackNormalTexture.get());
-	m_sphereSplitFramebuffer->attachTexture(GL_COLOR_ATTACHMENT4, m_sphereMiddlePositionTexture.get());
-	m_sphereSplitFramebuffer->attachTexture(GL_COLOR_ATTACHMENT5, m_sphereMiddleNormalTexture.get());
+	m_sphereSplitFramebuffer->attachTexture(GL_COLOR_ATTACHMENT0, m_sphereMiddlePositionTexture.get());
+	m_sphereSplitFramebuffer->attachTexture(GL_COLOR_ATTACHMENT1, m_sphereMiddleNormalTexture.get());
 	m_sphereSplitFramebuffer->attachTexture(GL_DEPTH_ATTACHMENT, m_depthTexture.get());
-	m_sphereSplitFramebuffer->setDrawBuffers({ GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3, GL_COLOR_ATTACHMENT4, GL_COLOR_ATTACHMENT5 });
+	m_sphereSplitFramebuffer->setDrawBuffers({ GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 });
 
 	m_surfaceFramebuffer = Framebuffer::create();
 	m_surfaceFramebuffer->attachTexture(GL_COLOR_ATTACHMENT0, m_surfacePositionTexture.get());
@@ -708,6 +710,7 @@ void SphereRenderer::display()
 	auto programGridGenerate = shaderProgram("grid-to-points");
 	auto programLayerSphere = shaderProgram("sphere");
 	auto programFramebufferSplitting = shaderProgram("fb-split");
+	auto programFramebufferSplittingBlitting = shaderProgram("fb-split-blit");
 
 	
 	// get cursor position for magic lens
@@ -1037,17 +1040,30 @@ void SphereRenderer::display()
 		},
 	});
 
-	const auto clampedInterpolation = [&LODs = std::as_const(LODs)](float t){
+	constexpr float PAIR_EPSILON = 0.01f;
+
+	// const auto cmp = [](float a, float b, float eps){
+	// 	return 
+	// };
+
+	const auto isSinglePair = [&LODs = std::as_const(LODs), PAIR_EPSILON](float t){
 		const auto n = LODs.size() - 1;
+		const std::size_t i = std::round(n * t);
+		return std::abs(n * t - i) < PAIR_EPSILON;
+	};
+
+	const auto clampedInterpolation = [&LODs = std::as_const(LODs), isSinglePair](float t){
+		const auto n = LODs.size() - 1;
+		if (isSinglePair(t))
+			return 0.f;
+		
 		return static_cast<float>(n * t - std::floor(n * t));
 	};
 
-	constexpr float PAIR_EPSILON = 0.01f;
-
-	const auto getPairwiseLODs = [&LODs, clampedInterpolation, PAIR_EPSILON](float t){
+	const auto getPairwiseLODs = [&LODs, clampedInterpolation, PAIR_EPSILON, isSinglePair](float t){
 		const auto n = LODs.size() - 1;
 		std::size_t i = n * t;
-		const bool bSinglePair = i == n || std::abs(n * t - i) < PAIR_EPSILON;
+		const bool bSinglePair = isSinglePair(t);
 		if (bSinglePair)
 			i = static_cast<std::size_t>(std::round(n * t));
 
@@ -1202,36 +1218,37 @@ void SphereRenderer::display()
 	//////////////////////////////////////////////////////////////////////////
 	glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
+	const bool bSingleLOD = isSinglePair(interpolation);
 	m_sphereSplitFramebuffer->bind();
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glDepthFunc(GL_ALWAYS);
 
-	programFramebufferSplitting->use();
+	const auto programSplitting = bSingleLOD ? programFramebufferSplittingBlitting : programFramebufferSplitting;
 
-	programFramebufferSplitting->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
-	programFramebufferSplitting->setUniform("interpolation", clampedInterpolation(interpolation));
+	programSplitting->use();
 
 	m_sphereLOD0PositionTexture->bindActive(0);
-	m_sphereLOD1PositionTexture->bindActive(1);
+	m_sphereLOD0NormalTexture->bindActive(1);
+	
+	if (!bSingleLOD) {
+		programSplitting->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
+		programSplitting->setUniform("interpolation", clampedInterpolation(interpolation));
 
-	m_sphereLOD0NormalTexture->bindActive(2);
-	m_sphereLOD1NormalTexture->bindActive(3);
-
-	m_LOD0depthTexture->bindActive(4);
-	m_LOD1depthTexture->bindActive(5);
+		m_sphereLOD1PositionTexture->bindActive(2);
+		m_sphereLOD1NormalTexture->bindActive(3);
+	}
 
 	m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
 
-	m_LOD1depthTexture->unbindActive(5);
-	m_LOD0depthTexture->unbindActive(4);
+	if (!bSingleLOD) {
+		m_sphereLOD1NormalTexture->unbindActive(3);
+		m_sphereLOD1PositionTexture->unbindActive(2);
+	}
 
-	m_sphereLOD1NormalTexture->unbindActive(3);
-	m_sphereLOD0NormalTexture->unbindActive(2);
-
-	m_sphereLOD1PositionTexture->unbindActive(1);
+	m_sphereLOD0NormalTexture->unbindActive(1);
 	m_sphereLOD0PositionTexture->unbindActive(0);
 		
-	programFramebufferSplitting->release();
+	programSplitting->release();
 
 	m_sphereSplitFramebuffer->unbind();
 

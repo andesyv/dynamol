@@ -232,7 +232,7 @@ void Protein::load(const std::string& filename)
 	// Generate testing sparse LOD (LOD-1)
 	m_genAtomsSparse.reserve(atom.size() / 10);
 	// const auto center = 0.5f * m_minimumBounds + 0.5f * m_maximumBounds;
-	for (std::size_t i{0}; i < atom.size(); i += 10) {
+	for (std::size_t i{0}; i + 10 < atom.size(); i += 10) {
 		const auto r = [offset](){ return ((ran() % 1000 * 0.001) - 0.5) * offset; };
 		const auto avg = glm::vec3{std::accumulate(atom.begin() + i, atom.begin() + std::min<unsigned long long>(i + 10, atom.end() - atom.begin()), glm::vec4{0.f})} / 10.f;
 		m_genAtomsSparse.emplace_back(glm::vec4{avg + glm::vec3{r(), r(), r()}, atom[i].w}, glm::vec4{}, 5.f);
@@ -241,7 +241,7 @@ void Protein::load(const std::string& filename)
 	// Generate hierarchical points (LOD0):
 	m_hierarchyPoints.reserve(atom.size());
 	for (std::size_t i{0}; i < atom.size(); ++i)
-		m_hierarchyPoints.emplace_back(atom.at(i), m_genAtomsSparse.at(i / 10).pos, 1.7f);
+		m_hierarchyPoints.emplace_back(atom.at(i), m_genAtomsSparse.at(std::min(i / 10, m_genAtomsSparse.size() - 1)).pos, 1.7f);
 
 	// Generate testing dense LOD (LOD1):
 	offset = 4.0;

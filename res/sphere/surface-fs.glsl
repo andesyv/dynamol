@@ -179,10 +179,10 @@ void main()
 		offset = intersections[offset].previous;
 	}
 
-#ifdef VISUALIZE_OVERLAPS
-	fragColor = vec4(vec3(entryCount) / maxEntries, 1.0);
-	return;
-#endif
+// #ifdef VISUALIZE_OVERLAPS
+// 	fragColor = vec4(vec3(entryCount) / maxEntries, 1.0);
+// 	return;
+// #endif
 
 	// Exit just in case (technically should never arrive here because offset would be 0)
 	if (entryCount == 0)
@@ -190,6 +190,11 @@ void main()
 
 	vec4 closestPosition = middlePosition;
 	vec3 closestNormal = middleNormal.xyz;
+
+#ifdef VISUALIZE_OVERLAPS
+	fragColor = vec4(vec3(closestPosition.xyz / 1000.0), 1.0);
+	return;
+#endif
 
 	// fragColor = vec4(vec3(closestPosition.w / 10.0 / 10.0), 1.0);
 	// return;
@@ -317,11 +322,11 @@ void main()
 						vec3 atomOffset = currentPosition.xyz-aj;
 						float atomDistance = length(atomOffset)/rj;
 
-						float atomValue = exp(-s*atomDistance*atomDistance);
+						float atomValue = exp(-s*atomDistance*atomDistance) * weight;
 						vec3 atomNormal = atomValue*normalize(atomOffset);
 						
-						sumValue += atomValue * weight;
-						sumNormal += atomNormal * weight;
+						sumValue += atomValue;
+						sumNormal += atomNormal;
 
 #ifdef COLORING
 						vec3 cj = vec3(1.0,1.0,1.0);
@@ -450,7 +455,7 @@ void main()
 					// Enhanced Sphere Tracing. Proceedings of Smart Tools and Apps for Graphics (Eurographics Italian Chapter Conference), pp. 1--8, 2014. 
 					// http://dx.doi.org/10.2312/stag.20141233
 					// t += surfaceDistance*omega;
-					t += surfaceDistance;
+					t += surfaceDistance*omega;
 					++stepCount;
 				}
 				
@@ -475,7 +480,7 @@ void main()
 		}
 	}
 
-	if (closestPosition.w >= 65535.0f)
+	if (closestPosition.w >= 65535.0)
 		discard;
 	
 
