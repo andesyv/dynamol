@@ -12,6 +12,7 @@
 #include <tuple>
 #include <utility>
 #include <functional>
+#include "enumerate.h"
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -585,9 +586,19 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 	m_sparseVAO = std::make_unique<globjects::VertexArray>();
 	vertexBinding = m_sparseVAO->binding(0);
 	vertexBinding->setAttribute(0);
-	vertexBinding->setBuffer(m_sparseAtomVertices.get(), 0, sizeof(glm::vec4));
+	vertexBinding->setBuffer(m_sparseAtomVertices.get(), 0, sizeof(Protein::HierchicalPoints));
 	vertexBinding->setFormat(4, GL_FLOAT);
 	m_sparseVAO->enable(0);
+	vertexBinding = m_sparseVAO->binding(1);
+	vertexBinding->setAttribute(1);
+	vertexBinding->setBuffer(m_sparseAtomVertices.get(), sizeof(glm::vec4), sizeof(Protein::HierchicalPoints));
+	vertexBinding->setFormat(4, GL_FLOAT);
+	m_sparseVAO->enable(1);
+	vertexBinding = m_sparseVAO->binding(2);
+	vertexBinding->setAttribute(2);
+	vertexBinding->setBuffer(m_sparseAtomVertices.get(), 2 * sizeof(glm::vec4), sizeof(Protein::HierchicalPoints));
+	vertexBinding->setFormat(1, GL_FLOAT);
+	m_sparseVAO->enable(2);
 
 	// Triangle (xyz, rgb, uv):
 	const auto verts = std::to_array<GLfloat>({
@@ -1006,15 +1017,42 @@ void SphereRenderer::display()
 	// using LODT = std::tuple<std::unique_ptr<globjects::VertexArray>&, int&, decltype(f0)&>;
 
 	const auto LODs = std::to_array<LOD>({
-		{m_vao, vertexCount, rLOD0, [](float t){ return 0.f; }, [](float t){
-			return sharpness;
-		}},	// LOD0
-		{m_denseVAO, m_denseVertexCount, rLOD1, [](float t){
-			return 0.f/*t < 0.5 ? 0.f : 2.f - t * 2.f*/;
-		}, [](float t){
-			return sharpness;
-		}}, // LOD1
+		// LOD-1
+		{
+			m_sparseVAO, m_sparseVertexCount, 5.f,
+			[](float t){ return 0.f; },
+			[](float t){ return sharpness; }
+		},
+		// LOD0
+		{
+			m_vao, vertexCount, 1.7f,
+			[](float t){ return 0.f; },
+			[](float t){ return sharpness; }
+		},
+		// LOD1
+		{
+			m_denseVAO, m_denseVertexCount, 1.f,
+			[](float t){ return 0.f/*t < 0.5 ? 0.f : 2.f - t * 2.f*/; },
+			[](float t){ return sharpness; }
+		},
 	});
+
+	const auto clampedInterpolation = [&LODs = std::as_const(LODs)](float t){
+		const auto n = LODs.size() - 1;
+		return static_cast<float>(n * t - std::floor(n * t));
+	};
+
+	constexpr float PAIR_EPSILON = 0.01f;
+
+	const auto getPairwiseLODs = [&LODs, clampedInterpolation, PAIR_EPSILON](float t){
+		const auto n = LODs.size() - 1;
+		std::size_t i = n * t;
+		const bool bSinglePair = i == n || std::abs(n * t - i) < PAIR_EPSILON;
+		if (bSinglePair)
+			i = static_cast<std::size_t>(std::round(n * t));
+
+		return std::to_array({LODs.data() + i, bSinglePair ? nullptr : LODs.data() + i+1});		
+	};
 
 	// if (timestepCount > 0)
 	// {
@@ -1026,6 +1064,8 @@ void SphereRenderer::display()
 	// }
 
 	constexpr float ATOM_SIZE = 1.7f;
+	const std::pair bounds{viewer()->scene()->protein()->minimumBounds(), viewer()->scene()->protein()->maximumBounds()};
+	/*
 
 	//////////////////////////////////////////////////////////////////////////
 	// Grid calculation passs
@@ -1038,7 +1078,6 @@ void SphereRenderer::display()
 	m_sceneGraphBuffer->clearSubData(GL_RGBA32UI, 0, 2 * sizeof(glm::uvec4) * gridCount, GL_RGBA, GL_UNSIGNED_INT, nullptr);
 	m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
 
-	const std::pair bounds{viewer()->scene()->protein()->minimumBounds(), viewer()->scene()->protein()->maximumBounds()};
 
 	programGrid->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 	programGrid->setUniform("inverseModelViewProjectionMatrix", inverseModelViewProjectionMatrix);
@@ -1055,6 +1094,7 @@ void SphereRenderer::display()
 	programGrid->release();
 
 	m_sceneGraphBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
+	*/
 
 	/*
 	//////////////////////////////////////////////////////////////////////////
@@ -1131,9 +1171,13 @@ void SphereRenderer::display()
 
 	m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
 
-	for (uint i{0}; i < 2; ++i) {
-		auto& [vao, vCount, scale, cluster, sharp] = LODs[i];
-		auto framebuffer = (i == 0 ? m_sphereLOD0Framebuffer : m_sphereLOD1Framebuffer).get();
+	for (auto [index, lod] : enumerate(getPairwiseLODs(interpolation))) {
+		if (lod == nullptr)
+			continue;
+		auto& [vao, vCount, scale, cluster, sharp] = *lod;
+		const auto interp = clampedInterpolation(interpolation);
+		const auto weight = index == 0 ? 1.f - interp : interp;
+		auto framebuffer = (index == 0 ? m_sphereLOD0Framebuffer : m_sphereLOD1Framebuffer).get();
 		framebuffer->bind();
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1141,9 +1185,9 @@ void SphereRenderer::display()
 		programSphere->setUniform("radiusScale", scale);
 		// programSpawn->setUniform("outerRadius", ATOM_SIZE * scale);
 		programSphere->setUniform("clipRadiusScale", radiusScale * scale);
-		programSphere->setUniform("clustering", cluster(interpolation));
-		programSphere->setUniform("individualSharpness", sharp(interpolation));
-		programSphere->setUniform("weight", i == 0 ? 1.f - interpolation : interpolation);
+		programSphere->setUniform("clustering", cluster(interp));
+		programSphere->setUniform("individualSharpness", sharp(interp));
+		programSphere->setUniform("weight", weight);
 
 		vao->drawArrays(GL_POINTS, 0, vCount);
 		framebuffer->unbind();
@@ -1165,7 +1209,7 @@ void SphereRenderer::display()
 	programFramebufferSplitting->use();
 
 	programFramebufferSplitting->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
-	programFramebufferSplitting->setUniform("interpolation", interpolation);
+	programFramebufferSplitting->setUniform("interpolation", clampedInterpolation(interpolation));
 
 	m_sphereLOD0PositionTexture->bindActive(0);
 	m_sphereLOD1PositionTexture->bindActive(1);
@@ -1288,16 +1332,20 @@ void SphereRenderer::display()
 	programSpawn->setUniform("minb", bounds.first);
 	programSpawn->setUniform("maxb", bounds.second);
 
-	for (uint i{0}; i < 2; ++i) {
-		auto& [vao, vCount, scale, cluster, sharp] = LODs[i];
+	for (auto [index, lod] : enumerate(getPairwiseLODs(interpolation))) {
+		if (lod == nullptr)
+			continue;
+		auto& [vao, vCount, scale, cluster, sharp] = *lod;
+		const auto interp = clampedInterpolation(interpolation);
+		const auto weight = index == 0 ? 1.f - interp : interp;
 
 		programSpawn->setUniform("radiusScale", radiusScale * scale);
 		programSpawn->setUniform("outerRadius", scale);
 		programSpawn->setUniform("clipRadiusScale", radiusScale * scale);
-		programSpawn->setUniform("clustering", cluster(interpolation));
-		programSpawn->setUniform("individualSharpness", sharp(interpolation));
-		programSpawn->setUniform("weight", i == 0 ? 1.f - interpolation : interpolation);
-		programSpawn->setUniform("interpolation", interpolation);
+		programSpawn->setUniform("clustering", cluster(interp));
+		programSpawn->setUniform("individualSharpness", sharp(interp));
+		programSpawn->setUniform("weight", weight);
+		programSpawn->setUniform("interpolation", interp);
 
 
 		vao->drawArrays(GL_POINTS, 0, vCount);
@@ -1487,7 +1535,6 @@ void SphereRenderer::display()
 	m_shadeFramebuffer->unbind();
 
 
-
 	// Draw test square
 	// m_shadeFramebuffer->bind();
 	// glClearDepth(1.0f);
@@ -1499,32 +1546,10 @@ void SphereRenderer::display()
 	// glDepthFunc(GL_ALWAYS);
 	// glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	
-	// vertexBinding = m_triangleVAO->binding(1);
-	// vertexBinding->setAttribute(1);
-	// vertexBinding->setBuffer(m_sceneGraphBuffer.get(), 0, 2 * sizeof(glm::vec4));
-	// vertexBinding->setFormat(4, GL_UNSIGNED_INT);
-	// m_triangleVAO->enable(1);
-	// vertexBinding = m_triangleVAO->binding(2);
-	// vertexBinding->setAttribute(2);
-	// vertexBinding->setBuffer(m_sceneGraphBuffer.get(), sizeof(glm::uvec4), 2 * sizeof(glm::uvec4));
-	// vertexBinding->setFormat(4, GL_UNSIGNED_INT);
-	// m_triangleVAO->enable(2);
-
-	// glMemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
-	// m_triangleVAO->bind();
-	// glBindBuffer(GL_ARRAY_BUFFER, m_sceneGraphBuffer->id());
-	// // glBufferData(GL_ARRAY_BUFFER, gridCount * 2 * sizeof(glm::uvec4), m_sceneGraphBuffer->)
-	// glVertexAttribPointer(0, 4, GL_UNSIGNED_INT, GL_FALSE, 2 * sizeof(glm::uvec4), nullptr);
-	// glEnableVertexAttribArray(0);
-	// glVertexAttribPointer(1, 4, GL_UNSIGNED_INT, GL_FALSE, 2 * sizeof(glm::uvec4), (void*)(sizeof(glm::uvec4)));
-	// glEnableVertexAttribArray(1);
-
 	// // // glPatchParameteri(GL_PATCH_VERTICES, 1);
 	// programTest->use();
 
-	// m_spherePositionTexture->bindActive(0);
-	// m_sphereBackPositionTexture->bindActive(1);
+	// m_sphereMiddlePositionTexture->bindActive(0);
 	// // m_offsetTexture->bindActive(1);
 	// programTest->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 	// programTest->setUniform("interpolation", interpolation);
@@ -1533,8 +1558,7 @@ void SphereRenderer::display()
 	// programTest->release();
 
 	// // m_offsetTexture->unbindActive(1);
-	// m_sphereBackPositionTexture->unbindActive(1);
-	// m_spherePositionTexture->unbindActive(0);
+	// m_sphereMiddlePositionTexture->unbindActive(0);
 
 	// m_shadeFramebuffer->unbind();
 

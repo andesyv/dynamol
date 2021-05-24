@@ -51,14 +51,14 @@ namespace dynamol
 		static const std::unordered_map<std::string, glm::uint> & chainIds();
 		static const std::array<glm::vec3, 64> & chainColors();
 
-		std::vector<glm::vec4> m_genAtomsSparse, m_genAtomsKindaSparse;
+		std::vector<glm::vec4> m_genAtomsKindaSparse;
 		
 		struct HierchicalPoints {
 			glm::vec4 pos;
 			glm::vec4 parent;
 			float radius;
 		};
-		std::vector<HierchicalPoints> m_genAtomsDense;
+		std::vector<HierchicalPoints> m_genAtomsSparse, m_genAtomsDense;
 		std::vector<HierchicalPoints> m_hierarchyPoints;
 
 	private:

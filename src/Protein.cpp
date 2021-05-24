@@ -17,6 +17,7 @@
 
 #include <random>
 #include <ctime>
+#include <numeric>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/string_cast.hpp>
@@ -226,16 +227,26 @@ void Protein::load(const std::string& filename)
 	globjects::debug() << uint(m_atoms.size()) << " timesteps loaded." << std::endl;
 
 
+	auto offset = 4.0;
 	const auto& atom = m_atoms.back();
+	// Generate testing sparse LOD (LOD-1)
+	m_genAtomsSparse.reserve(atom.size() / 10);
+	// const auto center = 0.5f * m_minimumBounds + 0.5f * m_maximumBounds;
+	for (std::size_t i{0}; i < atom.size(); i += 10) {
+		const auto r = [offset](){ return ((ran() % 1000 * 0.001) - 0.5) * offset; };
+		const auto avg = glm::vec3{std::accumulate(atom.begin() + i, atom.begin() + std::min<unsigned long long>(i + 10, atom.end() - atom.begin()), glm::vec4{0.f})} / 10.f;
+		m_genAtomsSparse.emplace_back(glm::vec4{avg + glm::vec3{r(), r(), r()}, atom[i].w}, glm::vec4{}, 5.f);
+	}
+
 	// Generate hierarchical points (LOD0):
 	m_hierarchyPoints.reserve(atom.size());
-	for (const auto& a : atom)
-		m_hierarchyPoints.emplace_back(a, glm::vec4{}, 1.7f);
+	for (std::size_t i{0}; i < atom.size(); ++i)
+		m_hierarchyPoints.emplace_back(atom.at(i), m_genAtomsSparse.at(i / 10).pos, 1.7f);
 
-	// Generate LOD (for testing):
+	// Generate testing dense LOD (LOD1):
+	offset = 4.0;
 	m_genAtomsDense.reserve(atom.size() * 10);
 	// Note: offset radius needs to be less than parent radius, otherwise child redius becomes negative.	
-	const auto offset = 4.0;
 	for (const auto& parent : atom) {
 		// Generate some particles with random offsets to the parent:
 		for (uint i{0}; i < 10; ++i) {
@@ -246,15 +257,6 @@ void Protein::load(const std::string& filename)
 			// radius = parentRadius - (position - parentPosition).length()
 			m_genAtomsDense.emplace_back(p, parent, 1.7f - glm::length(posOffset));
 		}
-	}
-
-	// Generate sparse LOD
-	const std::size_t pointCount = 1000;
-	m_genAtomsSparse.reserve(pointCount);
-	const auto center = 0.5f * m_minimumBounds + 0.5f * m_maximumBounds;
-	for (std::size_t i{0}; i < atom.size() && m_genAtomsSparse.size() < pointCount; i += atom.size() / pointCount) {
-		const auto r = [offset](){ return ((ran() % 1000 * 0.001) - 0.5) * 100.0; };
-		m_genAtomsSparse.push_back(glm::vec4{center, 0.f} + glm::vec4{r(), r(), r(), atom.at(i).w});
 	}
 
 	// Generate kinda sparse LOD
