@@ -24,17 +24,12 @@ uniform vec3 specularMaterial;
 uniform float shininess;
 uniform vec2 focusPosition;
 
-uniform sampler2D positionTexture_legacy;
-uniform sampler2D normalTexture_legacy;
-// uniform sampler2D environmentTexture;
-// uniform sampler2D bumpTexture;
-// uniform sampler2D materialTexture;
-layout(binding = 3) uniform usampler2D offsetTexture;
-layout(binding = 4) uniform usampler2D offsetTexture2;
-layout(binding = 7) uniform sampler2D positionTexture;
-layout(binding = 8) uniform sampler2D normalTexture;
-layout(binding = 9) uniform sampler2D positionTexture2;
-layout(binding = 10) uniform sampler2D normalTexture2;
+layout(binding = 0) uniform usampler2D offsetTexture;
+layout(binding = 1) uniform usampler2D offsetTexture2;
+layout(binding = 2) uniform sampler2D positionTexture;
+layout(binding = 3) uniform sampler2D normalTexture;
+layout(binding = 4) uniform sampler2D positionTexture2;
+layout(binding = 5) uniform sampler2D normalTexture2;
 
 uniform uint gridScale = 1;
 uniform uint gridDepth = 1;

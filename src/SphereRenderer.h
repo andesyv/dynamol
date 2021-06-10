@@ -60,16 +60,11 @@ namespace dynamol
 											m_LOD1depthTexture{nullptr};
 		std::unique_ptr<globjects::Texture> m_depthStencilTexture = nullptr;
 		std::unique_ptr<globjects::Texture> m_spherePositionTexture{nullptr},
-									m_sphereLevelPositionTexture{nullptr},
-									m_sphereBackPositionTexture{nullptr},
-									m_sphereMiddlePositionTexture{nullptr},
 									m_sphereLOD0PositionTexture{nullptr},
 									m_sphereLOD1PositionTexture{nullptr};
 		std::unique_ptr<globjects::Texture> m_sphereNormalTexture = nullptr;
 		std::unique_ptr<globjects::Texture> m_sphereLOD0NormalTexture{nullptr},
-											m_sphereLOD1NormalTexture{nullptr},
-											m_sphereBackNormalTexture{nullptr},
-											m_sphereMiddleNormalTexture{nullptr};
+											m_sphereLOD1NormalTexture{nullptr};
 		std::unique_ptr<globjects::Texture> m_surfacePositionTexture = nullptr;
 		std::unique_ptr<globjects::Texture> m_surfaceNormalTexture = nullptr;
 		std::unique_ptr<globjects::Texture> m_sphereDiffuseTexture = nullptr;
@@ -80,7 +75,7 @@ namespace dynamol
 		std::unique_ptr<globjects::Texture> m_shadowColorTexture = nullptr;
 		std::unique_ptr<globjects::Texture> m_shadowDepthTexture = nullptr;
 
-		std::unique_ptr<globjects::Framebuffer> m_sphereFramebuffer{nullptr}, m_sphereLevelFramebuffer{nullptr},
+		std::unique_ptr<globjects::Framebuffer> m_sphereFramebuffer{nullptr},
 												m_sphereLOD0Framebuffer{nullptr}, m_sphereLOD1Framebuffer{nullptr};
 		std::unique_ptr<globjects::Framebuffer> m_sphereSplitFramebuffer{nullptr};
 		std::unique_ptr<globjects::Framebuffer> m_surfaceFramebuffer = nullptr;
