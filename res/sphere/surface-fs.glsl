@@ -24,16 +24,17 @@ uniform vec3 specularMaterial;
 uniform float shininess;
 uniform vec2 focusPosition;
 
-uniform sampler2D positionTexture;
-uniform sampler2D normalTexture;
-uniform sampler2D environmentTexture;
-uniform sampler2D bumpTexture;
-uniform sampler2D materialTexture;
-uniform usampler2D offsetTexture;
-layout(binding = 7) uniform sampler2D backPositionTexture;
-layout(binding = 8) uniform sampler2D backNormalTexture;
-layout(binding = 9) uniform sampler2D middlePositionTexture;
-layout(binding = 10) uniform sampler2D middleNormalTexture;
+uniform sampler2D positionTexture_legacy;
+uniform sampler2D normalTexture_legacy;
+// uniform sampler2D environmentTexture;
+// uniform sampler2D bumpTexture;
+// uniform sampler2D materialTexture;
+layout(binding = 3) uniform usampler2D offsetTexture;
+layout(binding = 4) uniform usampler2D offsetTexture2;
+layout(binding = 7) uniform sampler2D positionTexture;
+layout(binding = 8) uniform sampler2D normalTexture;
+layout(binding = 9) uniform sampler2D positionTexture2;
+layout(binding = 10) uniform sampler2D normalTexture2;
 
 uniform uint gridScale = 1;
 uniform uint gridDepth = 1;
@@ -120,13 +121,20 @@ layout(std430, binding = 1) buffer intersectionBuffer
 	BufferEntry intersections[];
 };
 
-layout(std430, binding = 2) buffer statisticsBuffer
+layout(binding = 2) uniform atomic_uint count2;
+
+layout(std430, binding = 2) buffer intersectionBuffer2
 {
-	uint intersectionCount;
-	uint totalPixelCount;
-	uint totalEntryCount;
-	uint maximumEntryCount;
+	BufferEntry intersections2[];
 };
+
+// layout(std430, binding = 2) buffer statisticsBuffer
+// {
+// 	uint intersectionCount;
+// 	uint totalPixelCount;
+// 	uint totalEntryCount;
+// 	uint maximumEntryCount;
+// };
 
 struct Sphere
 {			
@@ -153,9 +161,7 @@ void main()
 		discard;
 
 	vec4 position = texelFetch(positionTexture,ivec2(gl_FragCoord.xy),0);
-	vec4 middlePosition = texelFetch(middlePositionTexture, ivec2(gl_FragCoord.xy), 0);
 	vec4 normal = texelFetch(normalTexture,ivec2(gl_FragCoord.xy),0);
-	vec4 middleNormal = texelFetch(middleNormalTexture,ivec2(gl_FragCoord.xy),0);
 
 	vec4 fragCoord = gFragmentPosition;
 	fragCoord /= fragCoord.w;
@@ -179,17 +185,17 @@ void main()
 		offset = intersections[offset].previous;
 	}
 
-// #ifdef VISUALIZE_OVERLAPS
-// 	fragColor = vec4(vec3(entryCount) / maxEntries, 1.0);
-// 	return;
-// #endif
+#ifdef VISUALIZE_OVERLAPS
+	fragColor = vec4(vec3(entryCount) / maxEntries, 1.0);
+	return;
+#endif
 
 	// Exit just in case (technically should never arrive here because offset would be 0)
 	if (entryCount == 0)
 		discard;
 
-	vec4 closestPosition = middlePosition;
-	vec3 closestNormal = middleNormal.xyz;
+	vec4 closestPosition = position;
+	vec3 closestNormal = normal.xyz;
 
 #ifdef VISUALIZE_OVERLAPS
 	fragColor = vec4(vec3(closestPosition.xyz / 1000.0), 1.0);
@@ -484,31 +490,31 @@ void main()
 		discard;
 	
 
-#ifdef NORMAL		
-	vec3 N = normalize(closestNormal);
+// #ifdef NORMAL		
+// 	vec3 N = normalize(closestNormal);
 	
-	// https://medium.com/@bgolus/normal-mapping-for-a-triplanar-shader-10bf39dca05a
-	vec3 blend = abs( N );
-	blend = normalize(max(blend, 0.00001)); // Force weights to sum to 1.0
-	float b = (blend.x + blend.y + blend.z);
-	blend /= vec3(b, b, b);	
+// 	// https://medium.com/@bgolus/normal-mapping-for-a-triplanar-shader-10bf39dca05a
+// 	vec3 blend = abs( N );
+// 	blend = normalize(max(blend, 0.00001)); // Force weights to sum to 1.0
+// 	float b = (blend.x + blend.y + blend.z);
+// 	blend /= vec3(b, b, b);	
 	
-	vec2 uvX = closestPosition.zy*0.5;
-	vec2 uvY = closestPosition.xz*0.5;
-	vec2 uvZ = closestPosition.xy*0.5;
+// 	vec2 uvX = closestPosition.zy*0.5;
+// 	vec2 uvY = closestPosition.xz*0.5;
+// 	vec2 uvZ = closestPosition.xy*0.5;
 
-	vec3 normalX = 2.0*texture(bumpTexture,uvX).xyz - 1.0;
-	vec3 normalY = 2.0*texture(bumpTexture,uvY).xyz - 1.0;
-	vec3 normalZ = 2.0*texture(bumpTexture,uvZ).xyz - 1.0;
+// 	vec3 normalX = 2.0*texture(bumpTexture,uvX).xyz - 1.0;
+// 	vec3 normalY = 2.0*texture(bumpTexture,uvY).xyz - 1.0;
+// 	vec3 normalZ = 2.0*texture(bumpTexture,uvZ).xyz - 1.0;
 
-	normalX = vec3(0.0, normalX.yx);
-	normalY = vec3(normalY.x, 0.0, normalY.y);
-	normalZ = vec3(normalZ.xy, 0.0);
+// 	normalX = vec3(0.0, normalX.yx);
+// 	normalY = vec3(normalY.x, 0.0, normalY.y);
+// 	normalZ = vec3(normalZ.xy, 0.0);
 
-	vec3 worldNormal = normalize(N + normalX.xyz * blend.x + normalY.xyz * blend.y + normalZ.xyz * blend.z);
+// 	vec3 worldNormal = normalize(N + normalX.xyz * blend.x + normalY.xyz * blend.y + normalZ.xyz * blend.z);
 
-	closestNormal = worldNormal;
-#endif
+// 	closestNormal = worldNormal;
+// #endif
 
 	vec4 cp = modelViewMatrix*vec4(closestPosition.xyz, 1.0);
 	cp = cp / cp.w;
@@ -524,10 +530,10 @@ void main()
 	// // fragColor = vec4(vec3(entryCount) / 128.0, 1.0);
 	// fragColor = vec4(phong * col, 1.0);
 
-#ifdef MATERIAL
-	vec3 materialColor = texture( materialTexture , closestNormal.xy*0.5+0.5 ).rgb;
-	diffuseColor *= materialColor;
-#endif
+// #ifdef MATERIAL
+// 	vec3 materialColor = texture( materialTexture , closestNormal.xy*0.5+0.5 ).rgb;
+// 	diffuseColor *= materialColor;
+// #endif
 
 	surfaceDiffuse = vec4(diffuseColor,1.0);
 	// sphereDiffuse = vec4(diffuseSphereColor,1.0);

@@ -89,7 +89,7 @@ void main()
 	if (!sphere.hit)
 		discard;
 
-	vec4 position = texelFetch(positionMiddleTexture,ivec2(gl_FragCoord.xy),0);
+	vec4 position = texelFetch(positionTexture,ivec2(gl_FragCoord.xy),0);
 	BufferEntry entry;
 	
 	entry.near = length(sphere.near.xyz-near.xyz);

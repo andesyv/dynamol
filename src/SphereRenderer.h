@@ -1,6 +1,7 @@
 #pragma once
 #include "Renderer.h"
 #include <memory>
+#include <array>
 
 #include <glm/glm.hpp>
 #include <glbinding/gl/gl.h>
@@ -50,10 +51,10 @@ namespace dynamol
 		std::unique_ptr<globjects::StaticStringSource> m_shaderSourceDefines = nullptr;
 		std::unique_ptr<globjects::NamedString> m_shaderDefines = nullptr;
 
-		std::unique_ptr<globjects::Buffer> m_intersectionBuffer = std::make_unique<globjects::Buffer>();
-		std::unique_ptr<globjects::Buffer> m_intersectionCount = std::make_unique<globjects::Buffer>();
+		std::array<std::unique_ptr<globjects::Buffer>, 2> m_intersectionBuffer{ std::make_unique<globjects::Buffer>(), std::make_unique<globjects::Buffer>() };
+		std::array<std::unique_ptr<globjects::Buffer>, 2> m_intersectionCount{ std::make_unique<globjects::Buffer>(), std::make_unique<globjects::Buffer>() };
 		std::unique_ptr<globjects::Buffer> m_statisticsBuffer = std::make_unique<globjects::Buffer>();
-		std::unique_ptr<globjects::Texture> m_offsetTexture = nullptr;
+		std::array<std::unique_ptr<globjects::Texture>, 2> m_offsetTexture{nullptr, nullptr};
 		std::unique_ptr<globjects::Texture> m_depthTexture = nullptr;
 		std::unique_ptr<globjects::Texture> m_LOD0depthTexture{nullptr},
 											m_LOD1depthTexture{nullptr};
