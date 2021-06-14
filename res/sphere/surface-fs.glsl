@@ -150,6 +150,12 @@ float calcDepth(vec3 pos)
 	return (((far - near) * ndc_depth) + near + far) / 2.0;
 }
 
+void swap(inout uint a, inout uint b) {
+	uint temp = a;
+	a = b;
+	b = temp;
+}
+
 void main()
 {
 	uint offset = texelFetch(offsetTexture,ivec2(gl_FragCoord.xy),0).r;
@@ -262,7 +268,7 @@ void main()
 	for (uint currentIndex = 0; currentIndex < maxEntryCount - 1; ++currentIndex) {
 		// Increment end index and sort (first list)
 		if (currentIndex < entryCount - 1) {
-			while (endIndex < entryCount && intersections[indices[endIndex]].near <= intersections[indices[startIndex]].far) {
+			while (endIndex < entryCount && sortedCount < endIndex + 1) {
 				uint minimumIndex = endIndex;
 
 				// Find minimum index (based on near distance)
@@ -272,35 +278,33 @@ void main()
 				
 				// Selection sort swap:
 				if (minimumIndex != endIndex)
-				{
-					uint temp = indices[minimumIndex];
-					indices[minimumIndex] = indices[endIndex];
-					indices[endIndex] = temp;
-				}
+					swap(indices[minimumIndex], indices[endIndex]);
 
-				++endIndex;
+				++sortedCount;
+
+				if (intersections[indices[endIndex]].near <= intersections[indices[startIndex]].far)
+					++endIndex;
 			}
 		}
 
 		// Increment end index and sort (second list)
 		if (!bSingleList && startIndex < entryCount - 1) {
-			while (endIndex2 < entryCount2 && intersections2[indices2[endIndex2]].near <= intersections2[indices2[startIndex2]].far) {
-				uint minimumIndex2 = endIndex2;
+			while (endIndex2 < entryCount2 && sortedCount2 < endIndex2 + 1) {
+				uint minimumIndex = endIndex2;
 
 				// Find minimum index (based on near distance)
-				for(uint i = minimumIndex2+1; i < entryCount2; i++)
-					if(intersections2[indices2[i]].near < intersections2[indices2[minimumIndex2]].near)
-						minimumIndex2 = i;
+				for(uint i = minimumIndex+1; i < entryCount2; i++)
+					if(intersections2[indices2[i]].near < intersections2[indices2[minimumIndex]].near)
+						minimumIndex = i;
 				
 				// Selection sort swap:
-				if (minimumIndex2 != endIndex2)
-				{
-					uint temp2 = indices2[minimumIndex2];
-					indices2[minimumIndex2] = indices2[endIndex2];
-					indices2[endIndex2] = temp2;
-				}
+				if (minimumIndex != endIndex2)
+					swap(indices2[minimumIndex], indices2[endIndex2]);
 
-				++endIndex2;
+				++sortedCount2;
+
+				if (intersections2[indices2[endIndex2]].near <= intersections2[indices2[startIndex2]].far)
+					++endIndex2;
 			}
 		}
 
@@ -309,8 +313,8 @@ void main()
 
 		// Q: Why +1?
 		// A: We (for some reason) check the inner range of the intersecting spheres [start+1, end-1]
-		uint ii = indices[startIndex+1];
-		uint ii2 = indices2[startIndex2+1];
+		uint ii = indices[startIndex];
+		uint ii2 = indices2[startIndex2];
 		float nearDistance = bSingleList ? intersections[ii].near : min(intersections[ii].near, intersections2[ii2].near);
 		float farDistance = bSingleList ? intersections[indices[endIndex-1]].far : max(intersections[indices[endIndex-1]].far, intersections2[indices2[endIndex2-1]].far);
 		// float nearDistance = intersections[ii].near;
@@ -345,7 +349,7 @@ void main()
 			vec3 sumColor = vec3(0.0);
 			
 			// sum contributions of atoms in the neighborhood (for first surface)
-			for (uint j = startIndex; j <= endIndex && j < entryCount; j++)
+			for (uint j = startIndex; j < endIndex && j < entryCount; j++)
 			{
 				uint ij = indices[j];
 				uint id = intersections[ij].id;
@@ -368,7 +372,7 @@ void main()
 			
 			if (!bSingleList) {
 				// sum contributions of atoms in the neighborhood (for second surface)
-				for (uint j = startIndex2; j <= endIndex2 && j < entryCount2; j++)
+				for (uint j = startIndex2; j < endIndex2 && j < entryCount2; j++)
 				{
 					uint ij = indices2[j];
 					uint id = intersections2[ij].id;
