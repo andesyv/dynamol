@@ -154,6 +154,8 @@ void main()
 {
 	uint offset = texelFetch(offsetTexture,ivec2(gl_FragCoord.xy),0).r;
 
+	// Note: Only need to check for  first offset, because if second offset is 0
+	// it's a single list instead.
 	if (offset == 0)
 		discard;
 
@@ -193,11 +195,13 @@ void main()
 		offset2 = intersections2[offset2].previous;
 	}
 
-// #ifdef VISUALIZE_OVERLAPS
-// 	// fragColor = vec4(vec3(entryCount2) / maxEntries, 1.0);
-// 	fragColor = vec4(vec3(position.w) / 100.0, 1.0);
-// 	return;
-// #endif
+	// Simplified algorithm if we only have a single list
+	const bool bSingleList = entryCount2 == 0;
+
+#ifdef VISUALIZE_OVERLAPS
+	fragColor = vec4(vec3(entryCount) / 128.0, 1.0);
+	return;
+#endif
 
 	// Exit just in case (technically should never arrive here because offset would be 0)
 	if (entryCount == 0)
@@ -214,13 +218,13 @@ void main()
 	// }
 
 	// Find end positions
-    if (65535.0 <= position.w) {
-        closestPosition = position2;
-        closestNormal = normal2.xyz;
-    } else if (65535.0 <= position2.w) {
+    if (bSingleList || 65535.0 <= position2.w) {
         closestPosition = position;
         closestNormal = normal.xyz;
-    } else {
+    }
+	// No need to check if 65535.0 <= position.w, as position.w should never
+	// be 65535.0 cause offset would be 0 and fragment would be discarded
+	else {
         closestPosition = mix(position, position2, interpolation);
         closestNormal = mix(normal, normal2, interpolation).xyz;
     }
@@ -254,8 +258,6 @@ void main()
 	const float omega = 1.2; // over-relaxation factor
 
 	const float s = sharpness*sharpnessFactor;
-	// Simplified algorithm if we only have a single list
-	const bool bSingleList = entryCount2 == 0;
 
 	for (uint currentIndex = 0; currentIndex < maxEntryCount - 1; ++currentIndex) {
 		// Increment end index and sort (first list)
