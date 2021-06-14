@@ -14,7 +14,6 @@ flat in uint gSphereId;
 
 layout(binding = 0) uniform sampler2D positionTexture;
 layout(r32ui, binding = 0) uniform uimage2D offsetImage;
-layout(binding = 1) uniform sampler2D positionMiddleTexture;
 
 struct BufferEntry
 {
@@ -95,7 +94,7 @@ void main()
 	entry.near = length(sphere.near.xyz-near.xyz);
 	
 	if (entry.near > position.w)
-		discard;	
+		discard;
 
 	uint index = atomicCounterIncrement(count);
 	uint prev = imageAtomicExchange(offsetImage,ivec2(gl_FragCoord.xy),index);

@@ -24,6 +24,8 @@ uniform vec3 specularMaterial;
 uniform float shininess;
 uniform vec2 focusPosition;
 
+uniform float interpolation = 0.0;
+
 layout(binding = 0) uniform usampler2D offsetTexture;
 layout(binding = 1) uniform usampler2D offsetTexture2;
 layout(binding = 2) uniform sampler2D positionTexture;
@@ -155,8 +157,12 @@ void main()
 	if (offset == 0)
 		discard;
 
+	uint offset2 = texelFetch(offsetTexture2,ivec2(gl_FragCoord.xy),0).r;
+
 	vec4 position = texelFetch(positionTexture,ivec2(gl_FragCoord.xy),0);
 	vec4 normal = texelFetch(normalTexture,ivec2(gl_FragCoord.xy),0);
+	vec4 position2 = texelFetch(positionTexture2,ivec2(gl_FragCoord.xy),0);
+	vec4 normal2 = texelFetch(normalTexture2,ivec2(gl_FragCoord.xy),0);
 
 	vec4 fragCoord = gFragmentPosition;
 	fragCoord /= fragCoord.w;
@@ -171,7 +177,9 @@ void main()
 
 	const uint maxEntries = 128;
 	uint entryCount = 0;
+	uint entryCount2 = 0;
 	uint indices[maxEntries];
+	uint indices2[maxEntries];
 
 	// Traverse a-buffer and extract entries. (0 means empty)
 	while (offset > 0)
@@ -179,23 +187,43 @@ void main()
 		indices[entryCount++] = offset;
 		offset = intersections[offset].previous;
 	}
+	while (offset2 > 0)
+	{
+		indices2[entryCount2++] = offset2;
+		offset2 = intersections2[offset2].previous;
+	}
 
-#ifdef VISUALIZE_OVERLAPS
-	fragColor = vec4(vec3(entryCount) / maxEntries, 1.0);
-	return;
-#endif
+// #ifdef VISUALIZE_OVERLAPS
+// 	// fragColor = vec4(vec3(entryCount2) / maxEntries, 1.0);
+// 	fragColor = vec4(vec3(position.w) / 100.0, 1.0);
+// 	return;
+// #endif
 
 	// Exit just in case (technically should never arrive here because offset would be 0)
 	if (entryCount == 0)
 		discard;
 
-	vec4 closestPosition = position;
-	vec3 closestNormal = normal.xyz;
+	vec4 closestPosition;
+	vec3 closestNormal;
+	// if (position.w < position2.w) {
+	// 	closestPosition = position;
+	// 	closestNormal = normal.xyz;
+	// } else {
+	// 	closestPosition = position2;
+	// 	closestNormal = normal2.xyz;
+	// }
 
-#ifdef VISUALIZE_OVERLAPS
-	fragColor = vec4(vec3(closestPosition.xyz / 1000.0), 1.0);
-	return;
-#endif
+	// Find end positions
+    if (65535.0 <= position.w) {
+        closestPosition = position2;
+        closestNormal = normal2.xyz;
+    } else if (65535.0 <= position2.w) {
+        closestPosition = position;
+        closestNormal = normal.xyz;
+    } else {
+        closestPosition = mix(position, position2, interpolation);
+        closestNormal = mix(normal, normal2, interpolation).xyz;
+    }
 
 	// fragColor = vec4(vec3(closestPosition.w / 10.0 / 10.0), 1.0);
 	// return;
@@ -206,279 +234,207 @@ void main()
 	vec3 specularColor = specularMaterial;
 	vec3 diffuseSphereColor = vec3(1.0,1.0,1.0);
 
-#ifdef COLORING
-	if (coloring > 0)
-	{
-		uint id = floatBitsToUint(normal.w);
-		uint elementId = bitfieldExtract(id,0,8);
-		uint residueId = bitfieldExtract(id,8,8);
-		uint chainId = bitfieldExtract(id,16,8);
-
-		if (coloring == 1)
-			diffuseColor = elements[elementId].color.rgb;
-		else if (coloring == 2)
-			diffuseColor = residues[residueId].color.rgb;
-		else if (coloring == 3)
-			diffuseColor = chains[chainId].color.rgb;
-
-		diffuseSphereColor = diffuseColor;
-	}
-#endif
-
-
-#ifdef LENSING
-	float focusFactor = 0.0;
-	if (lens)
-	{
-		focusFactor = min(16.0,1.0/(16.0*pow(length((fragCoord.xy-focusPosition)/vec2(0.5625,1.0)),2.0)));
-		sharpnessFactor += focusFactor;
-		focusFactor = min(1.0,focusFactor);
-	}
-#endif
-
+	// Start index is the index of the sphere before the intersecting spheres
 	uint startIndex = 0;
+	uint startIndex2 = 0;
+
+	// End index is the index of the sphere after the intersecting spheres
+	uint endIndex = 0;
+	uint endIndex2 = 0;
 
 	uint stepCount = 0;
+	const uint maxEntryCount = max(entryCount, entryCount2);
 
-	// selection sort
-	for(uint currentIndex = 0; currentIndex < entryCount; currentIndex++)
-	{
-		uint minimumIndex = currentIndex;
+	uint sortedCount = 0;
+	uint sortedCount2 = 0;
 
-		// Find minimum index (based on near distance)
-		for(uint i = currentIndex+1; i < entryCount; i++)
-		{
-			if(intersections[indices[i]].near < intersections[indices[minimumIndex]].near)
-			{
-				minimumIndex = i;					
-			}
-		}
+	// sphere tracing parameters
+	const uint maximumSteps = 32; // maximum number of steps
+	const float eps = 0.0125; // threshold for detected intersection
+	const float omega = 1.2; // over-relaxation factor
 
-		// Selection sort swap:
-		if (minimumIndex != currentIndex)
-		{
-			uint temp = indices[minimumIndex];
-			indices[minimumIndex] = indices[currentIndex];
-			indices[currentIndex] = temp;
-		}
+	const float s = sharpness*sharpnessFactor;
 
-		if (startIndex < currentIndex)
-		{
-			uint endIndex = currentIndex;
+	for (uint currentIndex = 0; currentIndex < maxEntryCount - 1; ++currentIndex) {
+		// Increment end index and sort (first list)
+		if (currentIndex < entryCount - 1) {
+			while (endIndex < entryCount && intersections[indices[endIndex]].near <= intersections[indices[startIndex]].far) {
+				uint minimumIndex = endIndex;
 
-			// if span of overlapping spheres of influence has ended, proceed with intersection testing
-			if (currentIndex >= entryCount-1 || intersections[indices[startIndex]].far < intersections[indices[currentIndex]].near)
-			{
-				// sphere tracing parameters
-				const uint maximumSteps = 32; // maximum number of steps
-				const float eps = 0.0125; // threshold for detected intersection
-				const float omega = 1.2; // over-relaxation factor
-
-				const float s = sharpness*sharpnessFactor;
-
-				uint ii = indices[startIndex+1];
-				float nearDistance = intersections[ii].near;
-				float farDistance = intersections[indices[endIndex-1]].far;
-
-				float maximumDistance = (farDistance-nearDistance)+1.0;
-				float surfaceDistance = 1.0;
-
-				vec4 rayOrigin = vec4(near.xyz,0.);
-				vec4 rayDirection = vec4(V,1.0);
-				vec4 currentPosition;
+				// Find minimum index (based on near distance)
+				for(uint i = minimumIndex+1; i < entryCount; i++)
+					if(intersections[indices[i]].near < intersections[indices[minimumIndex]].near)
+						minimumIndex = i;
 				
-				vec4 candidatePosition = rayOrigin + rayDirection * nearDistance;
-				vec3 candidateNormal = vec3(0.0);
-				vec3 candidateColor = vec3(0.0);
-				float candidateValue = 0.0;
-
-				float minimumDistance = farDistance;
-
-				uint currentStep = 0;			
-				float t = nearDistance;
-
-				while (++currentStep <= maximumSteps && t <= farDistance)
-				{    
-					currentPosition = rayOrigin + rayDirection*t;
-
-					if (currentPosition.w > closestPosition.w)
-						break;
-
-					float sumValue = 0.0;
-					vec3 sumNormal = vec3(0.0);
-					vec3 sumColor = vec3(0.0);
-					
-					// sum contributions of atoms in the neighborhood
-					for (uint j = startIndex; j <= endIndex; j++)
-					{
-						uint ij = indices[j];
-						uint id = intersections[ij].id;
-						uint elementId = bitfieldExtract(id,0,8);
-
-						vec3 aj = intersections[ij].center;
-						float rj = intersections[ij].radius; // elements[elementId].radius;
-						float weight = intersections[ij].weight;
-						// float sphereSharpness = intersections[ij].sharpness;
-
-						vec3 atomOffset = currentPosition.xyz-aj;
-						float atomDistance = length(atomOffset)/rj;
-
-						float atomValue = exp(-s*atomDistance*atomDistance) * weight;
-						vec3 atomNormal = atomValue*normalize(atomOffset);
-						
-						sumValue += atomValue;
-						sumNormal += atomNormal;
-
-#ifdef COLORING
-						vec3 cj = vec3(1.0,1.0,1.0);
-
-						if (coloring == 1)
-						{
-							cj = elements[elementId].color.rgb;
-						}
-						else if (coloring == 2)
-						{
-							uint residueId = bitfieldExtract(id,8,8);
-							cj = residues[residueId].color.rgb;
-						}
-						else if (coloring == 3)
-						{
-							uint chainId = bitfieldExtract(id,16,8);
-							cj = chains[chainId].color.rgb;
-						}
-#ifdef LENSING
-						cj = mix(vec3(diffuseMaterial),cj,focusFactor);
-#endif
-
-						vec3 atomColor = cj*atomValue;
-
-						if (coloring > 0)
-							sumColor += atomColor;
-#endif
-					}
-					
-					surfaceDistance = sqrt(-log(sumValue) / (s))-1.0;
-
-					// if (12 < currentStep) {
-					// 	fragColor = vec4(vec3(surfaceDistance / 10.0), 1.0);
-					// 	return;
-					// }
-
-					/*
-					/// Adjust surface based on higher LOD
-					uint LOD = 6;
-					// 1. Navigate to correct cell:
-					uint offsetIndex = 0;
-					const uint gridScale3 = gridScale * gridScale * gridScale;
-					uint gridStep = 1;
-					for (uint j = 0; j < LOD; ++j)
-						gridStep *= gridScale;
-					for (uint d = 1; d < LOD; ++d) {
-						offsetIndex += d * d * d * gridScale3;
-					}
-
-					vec3 bdir = (maxb - minb + 2.0 * BIAS).xyz / float(gridStep);
-
-					// Calculate index:
-					vec3 dir = currentPosition.xyz - minb - BIAS;
-					ivec3 gridIndex = ivec3(floor(dir / bdir));
-					float dist = 1000000.0;
-
-					// Voronoi sampling (sampling neighbouring cells as well for a total of 9 cells)
-					for (int z = -1; z < 2; ++z) {
-						for (int y = -1; y < 2; ++y) {
-							for (int x = -1; x < 2; ++x) {
-								ivec3 offsetGridIndex = ivec3(gridIndex.x + x, gridIndex.y + y, gridIndex.z + z);
-								// Bounds checking:
-								if (offsetGridIndex.x < 0 ||
-									offsetGridIndex.y < 0 ||
-									offsetGridIndex.z < 0 ||
-									gridStep < offsetGridIndex.x ||
-									gridStep < offsetGridIndex.y ||
-									gridStep < offsetGridIndex.z)
-									continue;
-
-								uint index = offsetIndex + offsetGridIndex.x + offsetGridIndex.y * gridStep + offsetGridIndex.z * gridStep * gridStep;
-								if (cells[index].count == 0)
-									continue;
-									
-								// 2. Find distance to average cell position:
-								/// (divide by 1000 because position is multiplied by 1000 for precision preservation)
-								vec3 cellPos = vec3(cells[index].pos.xyz) / float(cells[index].count * 1000);
-								float adjustedDistance = length(cellPos - currentPosition.xyz) - var2;
-								if (abs(adjustedDistance) < abs(dist))
-									dist = adjustedDistance;
-							}
-						}
-					}
-
-					// uint index = offsetIndex + gridIndex.x + gridIndex.y * gridStep + gridIndex.z * gridStep * gridStep;
-					// // if (cells[index].count == 0)
-					// // 	discard;
-					// vec3 cellPos = vec3(cells[index].pos.xyz) / float(cells[index].count * 1000);
-					// dist = max(length(cellPos - currentPosition.xyz) - var2, 0.);
-					
-					// diffuseColor = vec3(dist / 100.0);
-
-					// 3. Adjust distance based on new surface field:
-					if (abs(dist) < 1000.0)
-						surfaceDistance += dist * var1;
-					*/
-
-					if (surfaceDistance < eps)
-					{
-						if (currentPosition.w <= closestPosition.w)
-						{
-							closestPosition = currentPosition;
-							closestNormal = sumNormal;
-
-#ifdef COLORING
-							if (coloring > 0)
-								diffuseColor = sumColor / sumValue;
-#endif
-						}
-						break;
-					}
-
-					// Note: Commenting out this makes a very cool effect. :o
-					if (surfaceDistance < minimumDistance)
-					{
-						minimumDistance = surfaceDistance;
-						candidatePosition = currentPosition;
-						candidateNormal = sumNormal;
-						candidateColor = sumColor;
-						candidateValue = sumValue;
-					}
-
-					// Over-relaxation according to the approach described by Keinert et al.
-					// However, we simply skip overstepping correction, since it is basically invisible.
-					// Benjamin Keinert, Henry Sch�fer, Johann Kornd�rfer, Urs Ganse, and Marc Stamminger.
-					// Enhanced Sphere Tracing. Proceedings of Smart Tools and Apps for Graphics (Eurographics Italian Chapter Conference), pp. 1--8, 2014. 
-					// http://dx.doi.org/10.2312/stag.20141233
-					// t += surfaceDistance*omega;
-					t += surfaceDistance*omega;
-					++stepCount;
-				}
-				
-				// Only check for new closest position if all iterations passed (if t never overshot farDistance)
-				if (currentStep > maximumSteps)
+				// Selection sort swap:
+				if (minimumIndex != endIndex)
 				{
-					if (candidatePosition.w <= closestPosition.w)
-					{
-						closestPosition = candidatePosition;
-						closestNormal = candidateNormal;
-
-#ifdef COLORING
-						if (coloring > 0)
-							diffuseColor = candidateColor / candidateValue;
-#endif
-
-					}
+					uint temp = indices[minimumIndex];
+					indices[minimumIndex] = indices[endIndex];
+					indices[endIndex] = temp;
 				}
 
-				startIndex++;
+				++endIndex;
 			}
 		}
+
+		// Increment end index and sort (second list)
+		if (startIndex < entryCount - 1) {
+			while (endIndex2 < entryCount2 && intersections2[indices2[endIndex2]].near <= intersections2[indices2[startIndex2]].far) {
+				uint minimumIndex2 = endIndex2;
+
+				// Find minimum index (based on near distance)
+				for(uint i = minimumIndex2+1; i < entryCount2; i++)
+					if(intersections2[indices2[i]].near < intersections2[indices2[minimumIndex2]].near)
+						minimumIndex2 = i;
+				
+				// Selection sort swap:
+				if (minimumIndex2 != endIndex2)
+				{
+					uint temp2 = indices2[minimumIndex2];
+					indices2[minimumIndex2] = indices2[endIndex2];
+					indices2[endIndex2] = temp2;
+				}
+
+				++endIndex2;
+			}
+		}
+
+		// Note: At this point both ranges of sphere lists should either have reached an end of the span of overlap,
+		// or have reached the end. In both cases it should be safe to continue with sphere tracing.
+
+		// Q: Why +1?
+		// A: We (for some reason) check the inner range of the intersecting spheres [start+1, end-1]
+		uint ii = indices[startIndex+1];
+		uint ii2 = indices2[startIndex2+1];
+		float nearDistance = min(intersections[ii].near, intersections2[ii2].near);
+		float farDistance = max(intersections[indices[endIndex-1]].far, intersections2[indices2[endIndex2-1]].far);
+		// float nearDistance = intersections[ii].near;
+		// float farDistance = intersections[indices[endIndex-1]].far;
+
+		float maximumDistance = (farDistance-nearDistance);
+		float surfaceDistance = 1.0;
+
+		vec4 rayOrigin = vec4(near.xyz,0.);
+		vec4 rayDirection = vec4(V,1.0);
+		vec4 currentPosition;
+		
+		vec4 candidatePosition = rayOrigin + rayDirection * nearDistance;
+		vec3 candidateNormal = vec3(0.0);
+		vec3 candidateColor = vec3(0.0);
+		float candidateValue = 0.0;
+
+		float minimumDistance = maximumDistance;
+
+		uint currentStep = 0;			
+		float t = nearDistance;
+
+		while (++currentStep <= maximumSteps && t <= farDistance)
+		{    
+			currentPosition = rayOrigin + rayDirection*t;
+
+			if (currentPosition.w > closestPosition.w)
+				break;
+
+			float sumValue = 0.0;
+			vec3 sumNormal = vec3(0.0);
+			vec3 sumColor = vec3(0.0);
+			
+			// sum contributions of atoms in the neighborhood (for first surface)
+			for (uint j = startIndex; j <= endIndex && j < entryCount; j++)
+			{
+				uint ij = indices[j];
+				uint id = intersections[ij].id;
+				uint elementId = bitfieldExtract(id,0,8);
+
+				vec3 aj = intersections[ij].center;
+				float rj = intersections[ij].radius; // elements[elementId].radius;
+				float weight = intersections[ij].weight;
+				// float sphereSharpness = intersections[ij].sharpness;
+
+				vec3 atomOffset = currentPosition.xyz-aj;
+				float atomDistance = length(atomOffset)/rj;
+
+				float atomValue = exp(-s*atomDistance*atomDistance) * weight;
+				vec3 atomNormal = atomValue*normalize(atomOffset);
+				
+				sumValue += atomValue;
+				sumNormal += atomNormal;
+			}
+			
+			// sum contributions of atoms in the neighborhood (for second surface)
+			for (uint j = startIndex2; j <= endIndex2 && j < entryCount2; j++)
+			{
+				uint ij = indices2[j];
+				uint id = intersections2[ij].id;
+				uint elementId = bitfieldExtract(id,0,8);
+
+				vec3 aj = intersections2[ij].center;
+				float rj = intersections2[ij].radius; // elements[elementId].radius;
+				float weight = intersections2[ij].weight;
+				// float sphereSharpness = intersections[ij].sharpness;
+
+				vec3 atomOffset = currentPosition.xyz-aj;
+				float atomDistance = length(atomOffset)/rj;
+
+				float atomValue = exp(-s*atomDistance*atomDistance) * weight;
+				vec3 atomNormal = atomValue*normalize(atomOffset);
+				
+				sumValue += atomValue;
+				sumNormal += atomNormal;
+			}
+			
+			/** -1 because were searching for the distance to the surface when p(x) = 1.0
+				* Distance is defined as d(x) = p(x) - t, and as described in paper we estimate
+				* t = 1
+				*/
+			surfaceDistance = sqrt(-log(sumValue) / (s))-1.0;
+
+			if (surfaceDistance < eps)
+			{
+				if (currentPosition.w <= closestPosition.w)
+				{
+					closestPosition = currentPosition;
+					closestNormal = sumNormal;
+				}
+				break;
+			}
+
+			// Note: Commenting out this makes a very cool effect. :o
+			if (surfaceDistance < minimumDistance)
+			{
+				minimumDistance = surfaceDistance;
+				candidatePosition = currentPosition;
+				candidateNormal = sumNormal;
+				candidateColor = sumColor;
+				candidateValue = sumValue;
+			}
+
+			// Over-relaxation according to the approach described by Keinert et al.
+			// However, we simply skip overstepping correction, since it is basically invisible.
+			// Benjamin Keinert, Henry Sch�fer, Johann Kornd�rfer, Urs Ganse, and Marc Stamminger.
+			// Enhanced Sphere Tracing. Proceedings of Smart Tools and Apps for Graphics (Eurographics Italian Chapter Conference), pp. 1--8, 2014. 
+			// http://dx.doi.org/10.2312/stag.20141233
+			// t += surfaceDistance*omega;
+			t += surfaceDistance*omega;
+		}
+		
+		// Only check for new closest position if all iterations passed (if t never overshot farDistance)
+		if (currentStep > maximumSteps)
+		{
+			if (candidatePosition.w <= closestPosition.w)
+			{
+				closestPosition = candidatePosition;
+				closestNormal = candidateNormal;
+			}
+		}
+
+
+		// Increment start indices
+		if (currentIndex + 1 < entryCount - 1)
+			++startIndex;
+		if (currentIndex + 1 < entryCount2 - 1)
+			++startIndex2;
 	}
 
 	if (closestPosition.w >= 65535.0)

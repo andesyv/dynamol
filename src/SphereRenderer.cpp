@@ -1143,15 +1143,16 @@ void SphereRenderer::display()
 	m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
 
 	for (auto [index, lod] : enumerate(getPairwiseLODs(interpolation))) {
+		auto framebuffer = (index == 0 ? m_sphereLOD0Framebuffer : m_sphereLOD1Framebuffer).get();
+		framebuffer->bind();
+
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		
 		if (lod == nullptr)
 			continue;
 		auto& [vao, vCount, scale, cluster, sharp] = *lod;
 		const auto interp = clampedInterpolation(interpolation);
 		const auto weight = index == 0 ? 1.f - interp : interp;
-		auto framebuffer = (index == 0 ? m_sphereLOD0Framebuffer : m_sphereLOD1Framebuffer).get();
-		framebuffer->bind();
-
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		programSphere->setUniform("radiusScale", scale);
 		// programSpawn->setUniform("outerRadius", ATOM_SIZE * scale);
@@ -1266,10 +1267,10 @@ void SphereRenderer::display()
 	//////////////////////////////////////////////////////////////////////////
 	m_sphereFramebuffer->bind();
 	constexpr uint intersectionClearValue = 1;
+	constexpr uint offsetClearValue = 0;
 	// clear only the first intersection?
 	// m_intersectionBuffer->clearSubData(GL_R32UI, 0, sizeof(uint), GL_RED_INTEGER, GL_UNSIGNED_INT, &intersectionClearValue);
 
-	constexpr uint offsetClearValue = 0;
 
 	glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
@@ -1386,6 +1387,7 @@ void SphereRenderer::display()
 	programSurface->setUniform("coloring", uint(coloring));
 	programSurface->setUniform("environment", environmentMapping);
 	programSurface->setUniform("lens", lens);
+	programSurface->setUniform("interpolation", clampedInterpolation(interpolation));
 
 	programSurface->setUniform("gridScale", gridSize);
 	programSurface->setUniform("gridDepth", gridDepth);
@@ -1393,9 +1395,6 @@ void SphereRenderer::display()
 	programSurface->setUniform("maxb", bounds.second);
 	const auto t = float(glfwGetTime());
 	programSurface->setUniform("time", t);
-	// programSurface->setUniform("var1", var1);
-	// programSurface->setUniform("var2", var2);
-	// programSurface->setUniform("var3", var3);
 
 	m_vaoQuad->bind();
 	programSurface->use();
