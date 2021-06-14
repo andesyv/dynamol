@@ -254,6 +254,8 @@ void main()
 	const float omega = 1.2; // over-relaxation factor
 
 	const float s = sharpness*sharpnessFactor;
+	// Simplified algorithm if we only have a single list
+	const bool bSingleList = entryCount2 == 0;
 
 	for (uint currentIndex = 0; currentIndex < maxEntryCount - 1; ++currentIndex) {
 		// Increment end index and sort (first list)
@@ -279,7 +281,7 @@ void main()
 		}
 
 		// Increment end index and sort (second list)
-		if (startIndex < entryCount - 1) {
+		if (!bSingleList && startIndex < entryCount - 1) {
 			while (endIndex2 < entryCount2 && intersections2[indices2[endIndex2]].near <= intersections2[indices2[startIndex2]].far) {
 				uint minimumIndex2 = endIndex2;
 
@@ -307,8 +309,8 @@ void main()
 		// A: We (for some reason) check the inner range of the intersecting spheres [start+1, end-1]
 		uint ii = indices[startIndex+1];
 		uint ii2 = indices2[startIndex2+1];
-		float nearDistance = min(intersections[ii].near, intersections2[ii2].near);
-		float farDistance = max(intersections[indices[endIndex-1]].far, intersections2[indices2[endIndex2-1]].far);
+		float nearDistance = bSingleList ? intersections[ii].near : min(intersections[ii].near, intersections2[ii2].near);
+		float farDistance = bSingleList ? intersections[indices[endIndex-1]].far : max(intersections[indices[endIndex-1]].far, intersections2[indices2[endIndex2-1]].far);
 		// float nearDistance = intersections[ii].near;
 		// float farDistance = intersections[indices[endIndex-1]].far;
 
@@ -362,26 +364,28 @@ void main()
 				sumNormal += atomNormal;
 			}
 			
-			// sum contributions of atoms in the neighborhood (for second surface)
-			for (uint j = startIndex2; j <= endIndex2 && j < entryCount2; j++)
-			{
-				uint ij = indices2[j];
-				uint id = intersections2[ij].id;
-				uint elementId = bitfieldExtract(id,0,8);
+			if (!bSingleList) {
+				// sum contributions of atoms in the neighborhood (for second surface)
+				for (uint j = startIndex2; j <= endIndex2 && j < entryCount2; j++)
+				{
+					uint ij = indices2[j];
+					uint id = intersections2[ij].id;
+					uint elementId = bitfieldExtract(id,0,8);
 
-				vec3 aj = intersections2[ij].center;
-				float rj = intersections2[ij].radius; // elements[elementId].radius;
-				float weight = intersections2[ij].weight;
-				// float sphereSharpness = intersections[ij].sharpness;
+					vec3 aj = intersections2[ij].center;
+					float rj = intersections2[ij].radius; // elements[elementId].radius;
+					float weight = intersections2[ij].weight;
+					// float sphereSharpness = intersections[ij].sharpness;
 
-				vec3 atomOffset = currentPosition.xyz-aj;
-				float atomDistance = length(atomOffset)/rj;
+					vec3 atomOffset = currentPosition.xyz-aj;
+					float atomDistance = length(atomOffset)/rj;
 
-				float atomValue = exp(-s*atomDistance*atomDistance) * weight;
-				vec3 atomNormal = atomValue*normalize(atomOffset);
-				
-				sumValue += atomValue;
-				sumNormal += atomNormal;
+					float atomValue = exp(-s*atomDistance*atomDistance) * weight;
+					vec3 atomNormal = atomValue*normalize(atomOffset);
+					
+					sumValue += atomValue;
+					sumNormal += atomNormal;
+				}
 			}
 			
 			/** -1 because were searching for the distance to the surface when p(x) = 1.0
@@ -433,8 +437,10 @@ void main()
 		// Increment start indices
 		if (currentIndex + 1 < entryCount - 1)
 			++startIndex;
-		if (currentIndex + 1 < entryCount2 - 1)
-			++startIndex2;
+		
+		if (!bSingleList)
+			if (currentIndex + 1 < entryCount2 - 1)
+				++startIndex2;
 	}
 
 	if (closestPosition.w >= 65535.0)
