@@ -349,7 +349,7 @@ void main()
 			vec3 sumColor = vec3(0.0);
 			
 			// sum contributions of atoms in the neighborhood (for first surface)
-			for (uint j = startIndex; j < endIndex && j < entryCount; j++)
+			for (uint j = startIndex; j < endIndex; j++)
 			{
 				uint ij = indices[j];
 				uint id = intersections[ij].id;
@@ -361,9 +361,9 @@ void main()
 				// float sphereSharpness = intersections[ij].sharpness;
 
 				vec3 atomOffset = currentPosition.xyz-aj;
-				float atomDistance = length(atomOffset)/rj;
+				float atomDistanceSquared = dot(atomOffset, atomOffset)/(rj*rj);
 
-				float atomValue = exp(-s*atomDistance*atomDistance) * weight;
+				float atomValue = exp(-s*atomDistanceSquared) * weight;
 				vec3 atomNormal = atomValue*normalize(atomOffset);
 				
 				sumValue += atomValue;
@@ -372,7 +372,7 @@ void main()
 			
 			if (!bSingleList) {
 				// sum contributions of atoms in the neighborhood (for second surface)
-				for (uint j = startIndex2; j < endIndex2 && j < entryCount2; j++)
+				for (uint j = startIndex2; j < endIndex2; j++)
 				{
 					uint ij = indices2[j];
 					uint id = intersections2[ij].id;
@@ -384,9 +384,9 @@ void main()
 					// float sphereSharpness = intersections[ij].sharpness;
 
 					vec3 atomOffset = currentPosition.xyz-aj;
-					float atomDistance = length(atomOffset)/rj;
+					float atomDistanceSquared = dot(atomOffset, atomOffset)/(rj*rj);
 
-					float atomValue = exp(-s*atomDistance*atomDistance) * weight;
+					float atomValue = exp(-s*atomDistanceSquared) * weight;
 					vec3 atomNormal = atomValue*normalize(atomOffset);
 					
 					sumValue += atomValue;
