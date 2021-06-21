@@ -4,6 +4,7 @@
 #include "/globals.glsl"
 
 #define BIAS 0.001
+#define END_PLANE 65535.0
 
 layout(pixel_center_integer) in vec4 gl_FragCoord;
 
@@ -159,13 +160,10 @@ void swap(inout uint a, inout uint b) {
 void main()
 {
 	uint offset = texelFetch(offsetTexture,ivec2(gl_FragCoord.xy),0).r;
-
-	// Note: Only need to check for  first offset, because if second offset is 0
-	// it's a single list instead.
-	if (offset == 0)
-		discard;
-
 	uint offset2 = texelFetch(offsetTexture2,ivec2(gl_FragCoord.xy),0).r;
+	// Note: Offset == 0 doesn't mean offset2 != 0
+	if (offset == 0 && offset2 == 0)
+		discard;
 
 	vec4 position = texelFetch(positionTexture,ivec2(gl_FragCoord.xy),0);
 	vec4 normal = texelFetch(normalTexture,ivec2(gl_FragCoord.xy),0);
@@ -204,36 +202,54 @@ void main()
 	// Simplified algorithm if we only have a single list
 	const bool bSingleList = entryCount2 == 0;
 
-#ifdef VISUALIZE_OVERLAPS
-	fragColor = vec4(vec3(entryCount) / 128.0, 1.0);
-	return;
-#endif
+// #ifdef VISUALIZE_OVERLAPS
+// 	fragColor = vec4(vec3(entryCount) / 128.0, 1.0);
+// 	return;
+// #endif
 
-	// Exit just in case (technically should never arrive here because offset would be 0)
-	if (entryCount == 0)
-		discard;
 
+
+	/** Find closest position and sphere march end step.
+	 * Sphere march stops marching when past the closest position
+	 * Initial closest position is set to closest inner sphere
+	 * 
+	 * Note: position can still be END_PLANE when entryCount != 0, because
+	 * position is inner radius and entryCount is outer radius.
+	 * Likewise: position == END_PLANE when entryCount == 0
+	 */
 	vec4 closestPosition;
 	vec3 closestNormal;
-	// if (position.w < position2.w) {
-	// 	closestPosition = position;
-	// 	closestNormal = normal.xyz;
-	// } else {
-	// 	closestPosition = position2;
-	// 	closestNormal = normal2.xyz;
-	// }
+	// If second LOD is empty, use first
+	if (entryCount2 == 0 || position2.w >= END_PLANE) {
+		closestPosition = position;
+		closestNormal = normal.xyz;
+	// If first LOD is empty, use second
+	} else if (entryCount == 0 || position.w >= END_PLANE) {
+		closestPosition = position2;
+		closestNormal = normal2.xyz;
+	// If none are empty, choose closest:
+	} else {
+		if (position.w < position2.w) {
+			closestPosition = position;
+			closestNormal = normal.xyz;
+		} else {
+			closestPosition = position2;
+			closestNormal = normal2.xyz;
+		}
+	}
 
+	// TODO: Change to sort on w. 
 	// Find end positions
-    if (bSingleList || 65535.0 <= position2.w) {
-        closestPosition = position;
-        closestNormal = normal.xyz;
-    }
+    // if (bSingleList || 65535.0 <= position2.w) {
+    //     closestPosition = position;
+    //     closestNormal = normal.xyz;
+    // }
 	// No need to check if 65535.0 <= position.w, as position.w should never
 	// be 65535.0 cause offset would be 0 and fragment would be discarded
-	else {
-        closestPosition = mix(position, position2, interpolation);
-        closestNormal = mix(normal, normal2, interpolation).xyz;
-    }
+	// else {
+    //     closestPosition = mix(position, position2, interpolation);
+    //     closestNormal = mix(normal, normal2, interpolation).xyz;
+    // }
 
 	// fragColor = vec4(vec3(closestPosition.w / 10.0 / 10.0), 1.0);
 	// return;
@@ -262,13 +278,14 @@ void main()
 	const uint maximumSteps = 32; // maximum number of steps
 	const float eps = 0.0125; // threshold for detected intersection
 	const float omega = 1.2; // over-relaxation factor
+	const uint maximumIntersections = 128;
 
 	const float s = sharpness*sharpnessFactor;
 
 	for (uint currentIndex = 0; currentIndex < maxEntryCount - 1; ++currentIndex) {
 		// Increment end index and sort (first list)
 		if (currentIndex < entryCount - 1) {
-			while (endIndex < entryCount && sortedCount < endIndex + 1) {
+			while (endIndex < entryCount && endIndex - startIndex < maximumIntersections && sortedCount < endIndex + 1) {
 				uint minimumIndex = endIndex;
 
 				// Find minimum index (based on near distance)
@@ -287,26 +304,26 @@ void main()
 			}
 		}
 
-		// Increment end index and sort (second list)
-		if (!bSingleList && startIndex < entryCount - 1) {
-			while (endIndex2 < entryCount2 && sortedCount2 < endIndex2 + 1) {
-				uint minimumIndex = endIndex2;
+		// // Increment end index and sort (second list)
+		// if (!bSingleList && startIndex < entryCount - 1) {
+		// 	while (endIndex2 < entryCount2 && endIndex2 - startIndex2 < maximumIntersections && sortedCount2 < endIndex2 + 1) {
+		// 		uint minimumIndex = endIndex2;
 
-				// Find minimum index (based on near distance)
-				for(uint i = minimumIndex+1; i < entryCount2; i++)
-					if(intersections2[indices2[i]].near < intersections2[indices2[minimumIndex]].near)
-						minimumIndex = i;
+		// 		// Find minimum index (based on near distance)
+		// 		for(uint i = minimumIndex+1; i < entryCount2; i++)
+		// 			if(intersections2[indices2[i]].near < intersections2[indices2[minimumIndex]].near)
+		// 				minimumIndex = i;
 				
-				// Selection sort swap:
-				if (minimumIndex != endIndex2)
-					swap(indices2[minimumIndex], indices2[endIndex2]);
+		// 		// Selection sort swap:
+		// 		if (minimumIndex != endIndex2)
+		// 			swap(indices2[minimumIndex], indices2[endIndex2]);
 
-				++sortedCount2;
+		// 		++sortedCount2;
 
-				if (intersections2[indices2[endIndex2]].near <= intersections2[indices2[startIndex2]].far)
-					++endIndex2;
-			}
-		}
+		// 		if (intersections2[indices2[endIndex2]].near <= intersections2[indices2[startIndex2]].far)
+		// 			++endIndex2;
+		// 	}
+		// }
 
 		// Note: At this point both ranges of sphere lists should either have reached an end of the span of overlap,
 		// or have reached the end. In both cases it should be safe to continue with sphere tracing.
@@ -315,10 +332,10 @@ void main()
 		// A: We (for some reason) check the inner range of the intersecting spheres [start+1, end-1]
 		uint ii = indices[startIndex];
 		uint ii2 = indices2[startIndex2];
-		float nearDistance = bSingleList ? intersections[ii].near : min(intersections[ii].near, intersections2[ii2].near);
-		float farDistance = bSingleList ? intersections[indices[endIndex-1]].far : max(intersections[indices[endIndex-1]].far, intersections2[indices2[endIndex2-1]].far);
-		// float nearDistance = intersections[ii].near;
-		// float farDistance = intersections[indices[endIndex-1]].far;
+		// float nearDistance = bSingleList ? intersections[ii].near : min(intersections[ii].near, intersections2[ii2].near);
+		// float farDistance = bSingleList ? intersections[indices[endIndex-1]].far : max(intersections[indices[endIndex-1]].far, intersections2[indices2[endIndex2-1]].far);
+		float nearDistance = intersections[ii].near;
+		float farDistance = intersections[indices[endIndex-1]].far;
 
 		float maximumDistance = (farDistance-nearDistance);
 		float surfaceDistance = 1.0;
@@ -393,12 +410,18 @@ void main()
 					sumNormal += atomNormal;
 				}
 			}
+
+#ifdef VISUALIZE_OVERLAPS
+	fragColor = vec4(vec3(endIndex - startIndex) / 100.0, 1.0);
+	return;
+#endif
 			
 			/** -1 because were searching for the distance to the surface when p(x) = 1.0
 				* Distance is defined as d(x) = p(x) - t, and as described in paper we estimate
 				* t = 1
 				*/
 			surfaceDistance = sqrt(-log(sumValue) / (s))-1.0;
+			// surfaceDistance = lerp(sqrt(-log(sumValue) / (s))-1.0, sqrt(-log(sumValue2) / (s))-1.0, interpolation)
 
 			if (surfaceDistance < eps)
 			{

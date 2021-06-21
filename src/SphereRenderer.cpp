@@ -995,7 +995,7 @@ void SphereRenderer::display()
 		},
 	});
 
-	constexpr float PAIR_EPSILON = 0.01f;
+	constexpr float PAIR_EPSILON = 0.002f;
 
 	// const auto cmp = [](float a, float b, float eps){
 	// 	return 
@@ -1118,6 +1118,8 @@ void SphereRenderer::display()
 	//////////////////////////////////////////////////////////////////////////
 	// Sphere rendering pass
 	//////////////////////////////////////////////////////////////////////////
+	/** Renders sphere's inner radius onto a position lookup texture
+	 */ 
 	// m_sphereFramebuffer->bind();
 	glClearDepth(1.0f);
 	glClearColor(0.0, 0.0, 0.0, 65535.0f);
@@ -1154,9 +1156,9 @@ void SphereRenderer::display()
 		const auto interp = clampedInterpolation(interpolation);
 		const auto weight = index == 0 ? 1.f - interp : interp;
 
-		programSphere->setUniform("radiusScale", scale);
+		programSphere->setUniform("radiusScale", scale); // Inner radius
 		// programSpawn->setUniform("outerRadius", ATOM_SIZE * scale);
-		programSphere->setUniform("clipRadiusScale", radiusScale * scale);
+		programSphere->setUniform("clipRadiusScale", radiusScale * scale); // Outer radius
 		programSphere->setUniform("clustering", cluster(interp));
 		programSphere->setUniform("individualSharpness", sharp(interp));
 		programSphere->setUniform("weight", weight);
@@ -1164,7 +1166,7 @@ void SphereRenderer::display()
 		vao->drawArrays(GL_POINTS, 0, vCount);
 		framebuffer->unbind();
 	}
-		
+
 	programSphere->release();
 
 	m_sceneGraphBuffer->unbind(GL_SHADER_STORAGE_BUFFER);
@@ -1265,6 +1267,8 @@ void SphereRenderer::display()
 	//////////////////////////////////////////////////////////////////////////
 	// List generation pass
 	//////////////////////////////////////////////////////////////////////////
+	/** Generates an intersection list of the sphere's outer radius per pixel
+	 */
 	m_sphereFramebuffer->bind();
 	constexpr uint intersectionClearValue = 1;
 	constexpr uint offsetClearValue = 0;
@@ -1280,9 +1284,6 @@ void SphereRenderer::display()
 
 	// Positions of fragments of spheres (only closest to camera)
 	// m_spherePositionTexture->bindActive(0);
-	m_elementColorsRadii->bindBase(GL_UNIFORM_BUFFER, 0);
-	m_residueColors->bindBase(GL_UNIFORM_BUFFER, 1);
-	m_chainColors->bindBase(GL_UNIFORM_BUFFER, 2);
 	
 	programSpawn->use();
 	
@@ -1317,9 +1318,9 @@ void SphereRenderer::display()
 		m_offsetTexture[index]->bindImageTexture(0, 0, false, 0, GL_READ_WRITE, GL_R32UI);
 
 
-		programSpawn->setUniform("radiusScale", radiusScale * scale);
+		programSpawn->setUniform("radiusScale", radiusScale * scale); // Outer radius
 		programSpawn->setUniform("outerRadius", scale);
-		programSpawn->setUniform("clipRadiusScale", radiusScale * scale);
+		programSpawn->setUniform("clipRadiusScale", radiusScale * scale); // Also outer radius
 		programSpawn->setUniform("clustering", cluster(interp));
 		programSpawn->setUniform("individualSharpness", sharp(interp));
 		programSpawn->setUniform("weight", weight);

@@ -250,7 +250,7 @@ void main()
 	uint elementId = bitfieldExtract(sphereId,0,8);
     const float instanceScale = mix(1., 2., float(elementId) / 1000.0);
 	float sphereRadius = radiusScale * instanceScale;
-	float sphereClipRadius = clipRadiusScale * instanceScale;
+	float sphereClipRadius = clipRadiusScale * instanceScale; // Clip radius (outer radius) only used to test for NDC intersection with near plane.
 	
 	gSphereId = sphereId;
 	gSpherePosition = gl_in[0].gl_Position;
