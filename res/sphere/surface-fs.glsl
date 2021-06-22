@@ -94,6 +94,7 @@ struct BufferEntry
 	float radius;
 	float sharpness;
 	float weight;
+	uint LOD;
 };
 
 struct Cell
@@ -160,15 +161,17 @@ void swap(inout uint a, inout uint b) {
 void main()
 {
 	uint offset = texelFetch(offsetTexture,ivec2(gl_FragCoord.xy),0).r;
-	uint offset2 = texelFetch(offsetTexture2,ivec2(gl_FragCoord.xy),0).r;
+	// uint offset2 = texelFetch(offsetTexture2,ivec2(gl_FragCoord.xy),0).r;
 	// Note: Offset == 0 doesn't mean offset2 != 0
-	if (offset == 0 && offset2 == 0)
+	// if (offset == 0 && offset2 == 0)
+	// 	discard;
+	if (offset == 0)
 		discard;
 
 	vec4 position = texelFetch(positionTexture,ivec2(gl_FragCoord.xy),0);
 	vec4 normal = texelFetch(normalTexture,ivec2(gl_FragCoord.xy),0);
-	vec4 position2 = texelFetch(positionTexture2,ivec2(gl_FragCoord.xy),0);
-	vec4 normal2 = texelFetch(normalTexture2,ivec2(gl_FragCoord.xy),0);
+	// vec4 position2 = texelFetch(positionTexture2,ivec2(gl_FragCoord.xy),0);
+	// vec4 normal2 = texelFetch(normalTexture2,ivec2(gl_FragCoord.xy),0);
 
 	vec4 fragCoord = gFragmentPosition;
 	fragCoord /= fragCoord.w;
@@ -193,14 +196,14 @@ void main()
 		indices[entryCount++] = offset;
 		offset = intersections[offset].previous;
 	}
-	while (offset2 > 0)
-	{
-		indices2[entryCount2++] = offset2;
-		offset2 = intersections2[offset2].previous;
-	}
+	// while (offset2 > 0)
+	// {
+	// 	indices2[entryCount2++] = offset2;
+	// 	offset2 = intersections2[offset2].previous;
+	// }
 
 	// Simplified algorithm if we only have a single list
-	const bool bSingleList = entryCount2 == 0;
+	// const bool bSingleList = entryCount2 == 0;
 
 // #ifdef VISUALIZE_OVERLAPS
 // 	fragColor = vec4(vec3(entryCount) / 128.0, 1.0);
@@ -217,26 +220,26 @@ void main()
 	 * position is inner radius and entryCount is outer radius.
 	 * Likewise: position == END_PLANE when entryCount == 0
 	 */
-	vec4 closestPosition;
-	vec3 closestNormal;
+	vec4 closestPosition = position;
+	vec3 closestNormal = normal.xyz;
 	// If second LOD is empty, use first
-	if (entryCount2 == 0 || position2.w >= END_PLANE) {
-		closestPosition = position;
-		closestNormal = normal.xyz;
-	// If first LOD is empty, use second
-	} else if (entryCount == 0 || position.w >= END_PLANE) {
-		closestPosition = position2;
-		closestNormal = normal2.xyz;
-	// If none are empty, choose closest:
-	} else {
-		if (position.w < position2.w) {
-			closestPosition = position;
-			closestNormal = normal.xyz;
-		} else {
-			closestPosition = position2;
-			closestNormal = normal2.xyz;
-		}
-	}
+	// if (entryCount2 == 0 || position2.w >= END_PLANE) {
+	// 	closestPosition = position;
+	// 	closestNormal = normal.xyz;
+	// // If first LOD is empty, use second
+	// } else if (entryCount == 0 || position.w >= END_PLANE) {
+	// 	closestPosition = position2;
+	// 	closestNormal = normal2.xyz;
+	// // If none are empty, choose closest:
+	// } else {
+	// 	if (position.w < position2.w) {
+	// 		closestPosition = position;
+	// 		closestNormal = normal.xyz;
+	// 	} else {
+	// 		closestPosition = position2;
+	// 		closestNormal = normal2.xyz;
+	// 	}
+	// }
 
 	// TODO: Change to sort on w. 
 	// Find end positions
@@ -282,27 +285,41 @@ void main()
 
 	const float s = sharpness*sharpnessFactor;
 
-	for (uint currentIndex = 0; currentIndex < maxEntryCount - 1; ++currentIndex) {
-		// Increment end index and sort (first list)
+	// Loop for +1 past the end such that endIndex can extend to 1 past the end of the list.
+	// (Since our intersecting list is in range [start, end-1])
+	for (uint currentIndex = 0; currentIndex <= entryCount; ++currentIndex) {
+		// Don't need to sort on the last index because it will be sorted by that point
 		if (currentIndex < entryCount - 1) {
-			while (endIndex < entryCount && endIndex - startIndex < maximumIntersections && sortedCount < endIndex + 1) {
-				uint minimumIndex = endIndex;
+			// Increment end index and sort (first list)
+			uint minimumIndex = currentIndex;
 
-				// Find minimum index (based on near distance)
-				for(uint i = minimumIndex+1; i < entryCount; i++)
-					if(intersections[indices[i]].near < intersections[indices[minimumIndex]].near)
-						minimumIndex = i;
-				
-				// Selection sort swap:
-				if (minimumIndex != endIndex)
-					swap(indices[minimumIndex], indices[endIndex]);
+			// Find minimum index (based on near distance)
+			for(uint i = minimumIndex+1; i < entryCount; i++)
+				if(intersections[indices[i]].near < intersections[indices[minimumIndex]].near)
+					minimumIndex = i;
+			
+			// Selection sort swap:
+			if (minimumIndex != currentIndex)
+				swap(indices[minimumIndex], indices[currentIndex]);
 
-				++sortedCount;
-
-				if (intersections[indices[endIndex]].near <= intersections[indices[startIndex]].far)
-					++endIndex;
-			}
 		}
+
+		// Increment endIndex
+		while (endIndex < currentIndex && intersections[indices[endIndex]].near <= intersections[indices[startIndex]].far)
+			++endIndex;
+
+		// If we've yet to find a set of intersecting spheres, keep looping
+		if (endIndex < entryCount && intersections[indices[endIndex]].near <= intersections[indices[startIndex]].far)
+			continue;
+
+#ifdef VISUALIZE_OVERLAPS
+	if (endIndex >= entryCount || intersections[indices[startIndex]].far < intersections[indices[endIndex]].near) {
+		fragColor = vec4(0., 1.0, 0.0, 1.0);
+	} else {
+		fragColor = vec4(1.0, 0.0, 0.0, 1.0);
+	}
+	return;
+#endif
 
 		// // Increment end index and sort (second list)
 		// if (!bSingleList && startIndex < entryCount - 1) {
@@ -331,7 +348,7 @@ void main()
 		// Q: Why +1?
 		// A: We (for some reason) check the inner range of the intersecting spheres [start+1, end-1]
 		uint ii = indices[startIndex];
-		uint ii2 = indices2[startIndex2];
+		// uint ii2 = indices2[startIndex2];
 		// float nearDistance = bSingleList ? intersections[ii].near : min(intersections[ii].near, intersections2[ii2].near);
 		// float farDistance = bSingleList ? intersections[indices[endIndex-1]].far : max(intersections[indices[endIndex-1]].far, intersections2[indices2[endIndex2-1]].far);
 		float nearDistance = intersections[ii].near;
@@ -374,7 +391,7 @@ void main()
 
 				vec3 aj = intersections[ij].center;
 				float rj = intersections[ij].radius; // elements[elementId].radius;
-				float weight = intersections[ij].weight;
+				float weight = intersections[ij].LOD == 0 ? 1.0 - interpolation : interpolation;
 				// float sphereSharpness = intersections[ij].sharpness;
 
 				vec3 atomOffset = currentPosition.xyz-aj;
@@ -387,29 +404,29 @@ void main()
 				sumNormal += atomNormal;
 			}
 			
-			if (!bSingleList) {
-				// sum contributions of atoms in the neighborhood (for second surface)
-				for (uint j = startIndex2; j < endIndex2; j++)
-				{
-					uint ij = indices2[j];
-					uint id = intersections2[ij].id;
-					uint elementId = bitfieldExtract(id,0,8);
+			// if (!bSingleList) {
+			// 	// sum contributions of atoms in the neighborhood (for second surface)
+			// 	for (uint j = startIndex2; j < endIndex2; j++)
+			// 	{
+			// 		uint ij = indices2[j];
+			// 		uint id = intersections2[ij].id;
+			// 		uint elementId = bitfieldExtract(id,0,8);
 
-					vec3 aj = intersections2[ij].center;
-					float rj = intersections2[ij].radius; // elements[elementId].radius;
-					float weight = intersections2[ij].weight;
-					// float sphereSharpness = intersections[ij].sharpness;
+			// 		vec3 aj = intersections2[ij].center;
+			// 		float rj = intersections2[ij].radius; // elements[elementId].radius;
+			// 		float weight = intersections2[ij].weight;
+			// 		// float sphereSharpness = intersections[ij].sharpness;
 
-					vec3 atomOffset = currentPosition.xyz-aj;
-					float atomDistanceSquared = dot(atomOffset, atomOffset)/(rj*rj);
+			// 		vec3 atomOffset = currentPosition.xyz-aj;
+			// 		float atomDistanceSquared = dot(atomOffset, atomOffset)/(rj*rj);
 
-					float atomValue = exp(-s*atomDistanceSquared) * weight;
-					vec3 atomNormal = atomValue*normalize(atomOffset);
+			// 		float atomValue = exp(-s*atomDistanceSquared) * weight;
+			// 		vec3 atomNormal = atomValue*normalize(atomOffset);
 					
-					sumValue += atomValue;
-					sumNormal += atomNormal;
-				}
-			}
+			// 		sumValue += atomValue;
+			// 		sumNormal += atomNormal;
+			// 	}
+			// }
 
 #ifdef VISUALIZE_OVERLAPS
 	fragColor = vec4(vec3(endIndex - startIndex) / 100.0, 1.0);
@@ -464,12 +481,13 @@ void main()
 
 
 		// Increment start indices
-		if (currentIndex + 1 < entryCount - 1)
-			++startIndex;
+		// if (currentIndex + 1 < entryCount - 1)
+		// 	++startIndex;
+		++startIndex;
 		
-		if (!bSingleList)
-			if (currentIndex + 1 < entryCount2 - 1)
-				++startIndex2;
+		// if (!bSingleList)
+		// 	if (currentIndex + 1 < entryCount2 - 1)
+		// 		++startIndex2;
 	}
 
 	if (closestPosition.w >= 65535.0)

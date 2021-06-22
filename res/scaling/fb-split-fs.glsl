@@ -1,5 +1,7 @@
 #version 450
 
+#define END_PLANE 65535.0
+
 in vec4 gFragmentPosition;
 layout(pixel_center_integer) in vec4 gl_FragCoord;
 
@@ -31,17 +33,16 @@ void main() {
     vec4 lod0n = texelFetch(LOD0Normal,ivec2(gl_FragCoord.xy),0);
     vec4 lod1n = texelFetch(LOD1Normal,ivec2(gl_FragCoord.xy),0);
 
-    if (65535.0 <= lod0.w) {
+    if (END_PLANE <= lod0.w) {
         middlePosition = lod1;
         middleNormal = lod1n;
-    } else if (65535.0 <= lod1.w) {
+    } else if (END_PLANE <= lod1.w) {
         middlePosition = lod0;
         middleNormal = lod0n;
     } else {
-        middlePosition = mix(lod0, lod1, interpolation);
-        middleNormal = mix(lod0n, lod1n, interpolation);
+        // middlePosition = mix(lod0, lod1, interpolation);
+        // middleNormal = mix(lod0n, lod1n, interpolation);
+        middlePosition = lod0.w > lod1.w ? lod0 : lod1;
+        middleNormal = lod0.w > lod1.w ? lod0n : lod1n;
     }
-
-    // middlePosition = mix(lod0, lod1, interpolation);
-    // middleNormal = mix(lod0n, lod1n, interpolation);
 }
