@@ -3,7 +3,6 @@
 uniform mat4 modelViewProjectionMatrix;
 uniform mat4 inverseModelViewProjectionMatrix;
 uniform float interpolation = 0.0;
-uniform uint LOD = 0;
 
 in vec4 gFragmentPosition;
 flat in vec4 gSpherePosition;
@@ -26,7 +25,6 @@ struct BufferEntry
 	float radius;
 	float sharpness;
 	float weight;
-	uint LOD;
 };
 
 layout(binding = 1) uniform atomic_uint count;
@@ -110,7 +108,6 @@ void main()
 	entry.radius = gOuterRadius;
 	entry.sharpness = gSharpness;
 	entry.weight = gWeight;
-	entry.LOD = LOD;
 
 	intersections[index] = entry;
 
