@@ -200,7 +200,8 @@ void main()
 	}
 
 	// Simplified algorithm if we only have a single list
-	const bool bSingleList = entryCount2 == 0;
+	const bool bFirstEmpty = entryCount == 0;
+	const bool bSecondEmpty = entryCount2 == 0;
 
 // #ifdef VISUALIZE_OVERLAPS
 // 	fragColor = vec4(vec3(entryCount2) / 128.0, 1.0);
@@ -229,13 +230,15 @@ void main()
 		closestNormal = normal2.xyz;
 	// If none are empty, choose closest:
 	} else {
-		if (position.w < position2.w) {
-			closestPosition = position;
-			closestNormal = normal.xyz;
-		} else {
-			closestPosition = position2;
-			closestNormal = normal2.xyz;
-		}
+		// if (position.w > position2.w) {
+		// 	closestPosition = position;
+		// 	closestNormal = normal.xyz;
+		// } else {
+		// 	closestPosition = position2;
+		// 	closestNormal = normal2.xyz;
+		// }
+		closestPosition = mix(position, position2, interpolation);
+		closestNormal = mix(normal, normal2, interpolation).xyz;
 	}
 
 	float sharpnessFactor = 1.0;
@@ -252,7 +255,6 @@ void main()
 	uint endIndex = 0;
 	uint endIndex2 = 0;
 
-	uint stepCount = 0;
 	const uint maxEntryCount = max(entryCount, entryCount2);
 
 	// sphere tracing parameters
@@ -273,17 +275,10 @@ void main()
 	 * ^ Splitting the sorting into two lists, halves the complexity
 	 */
 
-#ifdef VISUALIZE_OVERLAPS
-	if (maxEntryCount != entryCount) {
-		fragColor = vec4(1.0, 0.0, 0.0, 1.0);
-		return;
-	}
-#endif
-
 	// Loop for +1 past the end such that endIndex can extend to 1 past the end of the list.
 	// (Since our intersecting list is in range [start, end-1])
 	for (uint currentIndex = 0; currentIndex <= maxEntryCount; ++currentIndex) {
-		if (currentIndex <= entryCount) {
+		if (!bFirstEmpty && currentIndex <= entryCount) {
 			// Incremental sort (first list)
 			/// Don't need to sort on the last index because it will be sorted by that point
 			if (currentIndex < entryCount - 1) {
@@ -304,7 +299,7 @@ void main()
 				++endIndex;
 		}
 
-		if (!bSingleList && currentIndex <= entryCount2) {
+		if (!bSecondEmpty && currentIndex <= entryCount2) {
 			// Incremental sort (second list)
 			if (currentIndex < entryCount2 - 1) {
 				uint minimumIndex = currentIndex;
@@ -326,21 +321,10 @@ void main()
 
 		// If we've yet to find a set of intersecting spheres, keep looping
 		if (
-			(endIndex < entryCount && intersections[indices[endIndex]].near <= intersections[indices[startIndex]].far) ||
-			(!bSingleList && endIndex2 < entryCount2 && intersections2[indices2[endIndex2]].near <= intersections2[indices2[startIndex2]].far)
+			(!bFirstEmpty && endIndex < entryCount && intersections[indices[endIndex]].near <= intersections[indices[startIndex]].far) ||
+			(!bSecondEmpty && endIndex2 < entryCount2 && intersections2[indices2[endIndex2]].near <= intersections2[indices2[startIndex2]].far)
 		)
 			continue;
-		// if (endIndex2 < entryCount2 && intersections2[indices2[endIndex2]].near <= intersections2[indices2[startIndex2]].far)
-		// 	continue;
-
-// #ifdef VISUALIZE_OVERLAPS
-// 	if (endIndex2 == entryCount2) {
-// 		fragColor = vec4(0., 1.0, 0.0, 1.0);
-// 	} else {
-// 		fragColor = vec4(vec3(intersections2[indices2[endIndex2]].near) / 100.0, 1.0);
-// 	}
-// 	return;
-// #endif
 
 		// Note: At this point both ranges of sphere lists should either have reached an end of the span of overlap,
 		// or have reached the end. In both cases it should be safe to continue with sphere tracing.
@@ -350,8 +334,10 @@ void main()
 		uint ii = indices[startIndex];
 		uint ii2 = indices2[startIndex2];
 		// Note: Near as min when only one list is in effect gives wrong result because one of them is 0
-		float nearDistance = bSingleList ? intersections[ii].near : min(intersections[ii].near, intersections2[ii2].near);
-		float farDistance = bSingleList ? intersections[indices[endIndex-1]].far : max(intersections[indices[endIndex-1]].far, intersections2[indices2[endIndex2-1]].far);
+		float nearDistance = bSecondEmpty ? intersections[ii].near : bFirstEmpty ? intersections2[ii2].near
+							: min(intersections[ii].near, intersections2[ii2].near);
+		float farDistance = bSecondEmpty ? intersections[indices[endIndex-1]].far : bFirstEmpty ? intersections2[indices2[endIndex2-1]].far
+							: max(intersections[indices[endIndex-1]].far, intersections2[indices2[endIndex2-1]].far);
 		// float nearDistance = intersections2[ii2].near;
 		// float farDistance = intersections2[indices2[endIndex2-1]].far;
 
@@ -384,29 +370,31 @@ void main()
 			vec3 sumColor = vec3(0.0);
 			
 			// sum contributions of atoms in the neighborhood (for first surface)
-			for (uint j = startIndex; j < endIndex; j++)
-			{
-				uint ij = indices[j];
-				uint id = intersections[ij].id;
-				uint elementId = bitfieldExtract(id,0,8);
+			if (!bFirstEmpty) {
+				for (uint j = startIndex; j < endIndex; j++)
+				{
+					uint ij = indices[j];
+					uint id = intersections[ij].id;
+					uint elementId = bitfieldExtract(id,0,8);
 
-				vec3 aj = intersections[ij].center;
-				float rj = intersections[ij].radius; // elements[elementId].radius;
-				float weight = intersections[ij].weight;
-				// float sphereSharpness = intersections[ij].sharpness;
+					vec3 aj = intersections[ij].center;
+					float rj = intersections[ij].radius; // elements[elementId].radius;
+					float weight = intersections[ij].weight;
+					// float sphereSharpness = intersections[ij].sharpness;
 
-				vec3 atomOffset = currentPosition.xyz-aj;
-				float atomDistanceSquared = dot(atomOffset, atomOffset)/(rj*rj);
+					vec3 atomOffset = currentPosition.xyz-aj;
+					float atomDistanceSquared = dot(atomOffset, atomOffset)/(rj*rj);
 
-				float atomValue = exp(-s*atomDistanceSquared) * weight;
-				vec3 atomNormal = atomValue*normalize(atomOffset);
-				
-				sumValue += atomValue;
-				sumNormal += atomNormal;
+					float atomValue = exp(-s*atomDistanceSquared) * weight;
+					vec3 atomNormal = atomValue*normalize(atomOffset);
+					
+					sumValue += atomValue;
+					sumNormal += atomNormal;
+				}
 			}
 			
-			if (!bSingleList) {
-				// sum contributions of atoms in the neighborhood (for second surface)
+			// sum contributions of atoms in the neighborhood (for second surface)
+			if (!bSecondEmpty) {
 				for (uint j = startIndex2; j < endIndex2; j++)
 				{
 					uint ij = indices2[j];
@@ -428,11 +416,6 @@ void main()
 					sumNormal += atomNormal;
 				}
 			}
-
-#ifdef VISUALIZE_OVERLAPS
-	fragColor = vec4(vec3(endIndex - startIndex) / 100.0, 1.0);
-	return;
-#endif
 			
 			/** -1 because were searching for the distance to the surface when p(x) = 1.0
 				* Distance is defined as d(x) = p(x) - t, and as described in paper we estimate
@@ -443,11 +426,10 @@ void main()
 
 			if (surfaceDistance < eps)
 			{
-				if (currentPosition.w <= closestPosition.w)
-				{
-					closestPosition = currentPosition;
-					closestNormal = sumNormal;
-				}
+				// Note: Unessesary check because `if (currentPosition.w > closestPosition.w) break;` prevents this from happening
+				// if (currentPosition.w <= closestPosition.w)
+				closestPosition = currentPosition;
+				closestNormal = sumNormal;
 				break;
 			}
 
@@ -473,19 +455,32 @@ void main()
 		// Only check for new closest position if all iterations passed (if t never overshot farDistance)
 		if (currentStep > maximumSteps)
 		{
-			if (candidatePosition.w <= closestPosition.w)
-			{
-				closestPosition = candidatePosition;
-				closestNormal = candidateNormal;
-			}
+			// Note: Unessesary check because `if (currentPosition.w > closestPosition.w) break;` prevents this from happening
+			// if (candidatePosition.w <= closestPosition.w)
+			closestPosition = candidatePosition;
+			closestNormal = candidateNormal;
 		}
 
-		++startIndex;
-		++startIndex2;
+		// If lists aren't empty, increment closest
+		if (!bFirstEmpty && !bSecondEmpty) {
+			if (intersections[ii].near < intersections2[ii2].near)
+				++startIndex;
+			else
+				++startIndex2;
+		// Otherwise increment both (only one of them is actually used)
+		} else {
+			++startIndex;
+			++startIndex2;
+		}
 	}
 
 	if (closestPosition.w >= 65535.0)
 		discard;
+
+#ifdef VISUALIZE_OVERLAPS
+	fragColor = vec4(vec3(closestPosition.w) / 100.0, 1.0);
+	return;
+#endif
 	
 
 // #ifdef NORMAL		
