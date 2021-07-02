@@ -295,6 +295,7 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 	m_spherePositionTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	m_spherePositionTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
+	// Position textures:
 	m_sphereLOD0PositionTexture = Texture::create(GL_TEXTURE_2D);
 	m_sphereLOD0PositionTextureNear = Texture::create(GL_TEXTURE_2D);
 	m_sphereLOD1PositionTexture = Texture::create(GL_TEXTURE_2D);
@@ -320,19 +321,23 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 	m_sphereNormalTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	m_sphereNormalTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
+	// Normals textures:
 	m_sphereLOD0NormalTexture = Texture::create(GL_TEXTURE_2D);
-	m_sphereLOD0NormalTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	m_sphereLOD0NormalTexture->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	m_sphereLOD0NormalTexture->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	m_sphereLOD0NormalTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	m_sphereLOD0NormalTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-	
 	m_sphereLOD1NormalTexture = Texture::create(GL_TEXTURE_2D);
-	m_sphereLOD1NormalTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	m_sphereLOD1NormalTexture->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	m_sphereLOD1NormalTexture->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	m_sphereLOD1NormalTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	m_sphereLOD1NormalTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+	m_sphereLOD0NormalTextureNear = Texture::create(GL_TEXTURE_2D);
+	m_sphereLOD1NormalTextureNear = Texture::create(GL_TEXTURE_2D);
+	for (auto tex : {
+		m_sphereLOD0NormalTexture.get(),
+		m_sphereLOD1NormalTexture.get(),
+		m_sphereLOD0NormalTextureNear.get(),
+		m_sphereLOD1NormalTextureNear.get()
+	}) {
+		tex->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		tex->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		tex->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		tex->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		tex->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+	}
 
 	m_surfacePositionTexture = Texture::create(GL_TEXTURE_2D);
 	m_surfacePositionTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -457,8 +462,8 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 
 	for (auto [fb, sphereTex, normalTex, depthTex] : zip(
 		std::to_array({m_sphereLOD0Framebuffer.get(), m_sphereLOD1Framebuffer.get(), m_sphereLOD0FramebufferNear.get(), m_sphereLOD1FramebufferNear.get()}),
-		std::to_array({m_sphereLOD0PositionTexture.get(), m_sphereLOD1PositionTexture.get(), m_sphereLOD0PositionTextureNear.get(), m_sphereLOD1PositionTexture.get()}),
-		std::to_array({m_sphereLOD0NormalTexture.get(), m_sphereLOD1NormalTexture.get(), m_sphereLOD0NormalTexture.get(), m_sphereLOD1NormalTexture.get()}),
+		std::to_array({m_sphereLOD0PositionTexture.get(), m_sphereLOD1PositionTexture.get(), m_sphereLOD0PositionTextureNear.get(), m_sphereLOD1PositionTextureNear.get()}),
+		std::to_array({m_sphereLOD0NormalTexture.get(), m_sphereLOD1NormalTexture.get(), m_sphereLOD0NormalTextureNear.get(), m_sphereLOD1NormalTextureNear.get()}),
 		std::to_array({m_LOD0depthTexture.get(), m_LOD1depthTexture.get(), m_LOD0depthTexture.get(), m_LOD1depthTexture.get()})
 		)) {
 		fb->attachTexture(GL_COLOR_ATTACHMENT0, sphereTex);
@@ -1181,7 +1186,7 @@ void SphereRenderer::display()
 			continue;
 		auto& [vao, vCount, scale, cluster, sharp] = *lod;
 		const auto interp = clampedInterpolation(interpolation);
-		const auto weight = index == 0 ? 1.f - interp : interp;
+		const auto weight = index % 2 == 0 ? 1.f - interp : interp;
 
 		// 2 renderpasses of each LOD with inner radiuses and 2 renderpasses of each LOD with outer radiuses
 		programSphere->setUniform("radiusScale", index < 2 ? scale : radiusScale * scale); // Inner radius
