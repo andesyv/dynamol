@@ -13,6 +13,7 @@ flat in float gWeight;
 flat in uint gSphereId;
 
 layout(binding = 0) uniform sampler2D positionTexture;
+layout(binding = 1) uniform sampler2D positionNearTexture;
 layout(r32ui, binding = 0) uniform uimage2D offsetImage;
 
 struct BufferEntry

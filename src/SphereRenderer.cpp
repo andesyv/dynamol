@@ -23,10 +23,24 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
+#include "zip.h"
+
 using namespace dynamol;
 using namespace gl;
 using namespace glm;
 using namespace globjects;
+
+// https://stackoverflow.com/a/42774523
+template <typename Type, std::size_t... sizes>
+auto cat(const std::array<Type, sizes>&... arrays)
+{
+    std::array<Type, (sizes + ...)> result;
+    std::size_t index{};
+
+    ((std::copy_n(arrays.begin(), sizes, result.begin() + index), index += sizes), ...);
+
+    return result;
+}
 
 // https://stackoverflow.com/questions/1505675/power-of-an-integer-in-c
 int pow(int a, unsigned int p) {
@@ -282,18 +296,22 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 	m_spherePositionTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
 	m_sphereLOD0PositionTexture = Texture::create(GL_TEXTURE_2D);
-	m_sphereLOD0PositionTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	m_sphereLOD0PositionTexture->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	m_sphereLOD0PositionTexture->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	m_sphereLOD0PositionTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	m_sphereLOD0PositionTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-
+	m_sphereLOD0PositionTextureNear = Texture::create(GL_TEXTURE_2D);
 	m_sphereLOD1PositionTexture = Texture::create(GL_TEXTURE_2D);
-	m_sphereLOD1PositionTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	m_sphereLOD1PositionTexture->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	m_sphereLOD1PositionTexture->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	m_sphereLOD1PositionTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	m_sphereLOD1PositionTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+	m_sphereLOD1PositionTextureNear = Texture::create(GL_TEXTURE_2D);
+
+	for (auto tex : {
+		m_sphereLOD0PositionTexture.get(),
+		m_sphereLOD0PositionTextureNear.get(),
+		m_sphereLOD1PositionTexture.get(),
+		m_sphereLOD1PositionTextureNear.get()
+	}) {
+		tex->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		tex->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		tex->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		tex->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		tex->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+	}
 
 	m_sphereNormalTexture = Texture::create(GL_TEXTURE_2D);
 	m_sphereNormalTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -437,17 +455,17 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 	m_sphereFramebuffer->attachTexture(GL_DEPTH_ATTACHMENT, m_depthTexture.get());
 	m_sphereFramebuffer->setDrawBuffers({ GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 });
 
-	m_sphereLOD0Framebuffer = Framebuffer::create();
-	m_sphereLOD0Framebuffer->attachTexture(GL_COLOR_ATTACHMENT0, m_sphereLOD0PositionTexture.get());
-	m_sphereLOD0Framebuffer->attachTexture(GL_COLOR_ATTACHMENT1, m_sphereLOD0NormalTexture.get());
-	m_sphereLOD0Framebuffer->attachTexture(GL_DEPTH_ATTACHMENT, m_LOD0depthTexture.get());
-	m_sphereLOD0Framebuffer->setDrawBuffers({ GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 });
-	
-	m_sphereLOD1Framebuffer = Framebuffer::create();
-	m_sphereLOD1Framebuffer->attachTexture(GL_COLOR_ATTACHMENT0, m_sphereLOD1PositionTexture.get());
-	m_sphereLOD1Framebuffer->attachTexture(GL_COLOR_ATTACHMENT1, m_sphereLOD1NormalTexture.get());
-	m_sphereLOD1Framebuffer->attachTexture(GL_DEPTH_ATTACHMENT, m_LOD1depthTexture.get());
-	m_sphereLOD1Framebuffer->setDrawBuffers({ GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 });
+	for (auto [fb, sphereTex, normalTex, depthTex] : zip(
+		std::to_array({m_sphereLOD0Framebuffer.get(), m_sphereLOD1Framebuffer.get(), m_sphereLOD0FramebufferNear.get(), m_sphereLOD1FramebufferNear.get()}),
+		std::to_array({m_sphereLOD0PositionTexture.get(), m_sphereLOD1PositionTexture.get(), m_sphereLOD0PositionTextureNear.get(), m_sphereLOD1PositionTexture.get()}),
+		std::to_array({m_sphereLOD0NormalTexture.get(), m_sphereLOD1NormalTexture.get(), m_sphereLOD0NormalTexture.get(), m_sphereLOD1NormalTexture.get()}),
+		std::to_array({m_LOD0depthTexture.get(), m_LOD1depthTexture.get(), m_LOD0depthTexture.get(), m_LOD1depthTexture.get()})
+		)) {
+		fb->attachTexture(GL_COLOR_ATTACHMENT0, sphereTex);
+		fb->attachTexture(GL_COLOR_ATTACHMENT1, normalTex);
+		fb->attachTexture(GL_DEPTH_ATTACHMENT, depthTex);
+		fb->setDrawBuffers({ GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 });
+	}
 
 	m_surfaceFramebuffer = Framebuffer::create();
 	m_surfaceFramebuffer->attachTexture(GL_COLOR_ATTACHMENT0, m_surfacePositionTexture.get());
@@ -1144,8 +1162,17 @@ void SphereRenderer::display()
 
 	m_sceneGraphBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 7);
 
-	for (auto [index, lod] : enumerate(getPairwiseLODs(interpolation))) {
-		auto framebuffer = (index == 0 ? m_sphereLOD0Framebuffer : m_sphereLOD1Framebuffer).get();
+	const auto getFramebuffer = [&](auto i){
+		return std::to_array({
+			m_sphereLOD0Framebuffer.get(),
+			m_sphereLOD1Framebuffer.get(),
+			m_sphereLOD0FramebufferNear.get(),
+			m_sphereLOD1FramebufferNear.get()
+		}).at(i);
+	};
+
+	for (auto [index, lod] : enumerate(cat(getPairwiseLODs(interpolation), getPairwiseLODs(interpolation)))) {
+		auto framebuffer = getFramebuffer(index);
 		framebuffer->bind();
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1156,7 +1183,8 @@ void SphereRenderer::display()
 		const auto interp = clampedInterpolation(interpolation);
 		const auto weight = index == 0 ? 1.f - interp : interp;
 
-		programSphere->setUniform("radiusScale", scale); // Inner radius
+		// 2 renderpasses of each LOD with inner radiuses and 2 renderpasses of each LOD with outer radiuses
+		programSphere->setUniform("radiusScale", index < 2 ? scale : radiusScale * scale); // Inner radius
 		// programSpawn->setUniform("outerRadius", ATOM_SIZE * scale);
 		programSphere->setUniform("clipRadiusScale", radiusScale * scale); // Outer radius
 		programSphere->setUniform("clustering", cluster(interp));
@@ -1313,6 +1341,7 @@ void SphereRenderer::display()
 		m_offsetTexture[index]->clearImage(0, GL_RED_INTEGER, GL_UNSIGNED_INT, &offsetClearValue);
 
 		(index == 0 ? m_sphereLOD0PositionTexture : m_sphereLOD1PositionTexture)->bindActive(0);
+		(index == 0 ? m_sphereLOD0PositionTextureNear : m_sphereLOD1PositionTextureNear)->bindActive(1);
 		m_intersectionBuffer[index]->bindBase(GL_SHADER_STORAGE_BUFFER, 1);
 		m_intersectionCount[index]->bindBase(GL_ATOMIC_COUNTER_BUFFER, 1);
 		m_offsetTexture[index]->bindImageTexture(0, 0, false, 0, GL_READ_WRITE, GL_R32UI);
@@ -1332,9 +1361,10 @@ void SphereRenderer::display()
 		m_intersectionCount[index]->unbind(GL_ATOMIC_COUNTER_BUFFER);
 		m_intersectionBuffer[index]->unbind(GL_SHADER_STORAGE_BUFFER);
 		m_offsetTexture[index]->unbindImageTexture(0);
+		(index == 0 ? m_sphereLOD0PositionTextureNear : m_sphereLOD1PositionTextureNear)->unbindActive(1);
 		(index == 0 ? m_sphereLOD0PositionTexture : m_sphereLOD1PositionTexture)->unbindActive(0);
 	}
-		
+	
 	programSpawn->release();
 	
 	// m_spherePositionTexture->unbindActive(0);

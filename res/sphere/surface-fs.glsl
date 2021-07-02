@@ -295,6 +295,7 @@ void main()
 			}
 
 			// Increment endIndex (first list)
+			// && endIndex+1 - startIndex < maximumIntersections
 			while (endIndex < currentIndex && intersections[indices[endIndex]].near <= intersections[indices[startIndex]].far)
 				++endIndex;
 		}

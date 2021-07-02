@@ -28,9 +28,7 @@ public:
             std::apply([](auto& ... it){ ((++it), ...); }, its);
             return *this;
         }
-        // auto operator!=(const ZipIterator& rhs) const {
-        //     return its != rhs.its;
-        // }
+        
         auto operator<=>(const ZipIterator& rhs) const = default; // lol
     };
 
@@ -41,6 +39,11 @@ public:
     auto end() const {
         return std::apply([](auto&& ... args){ return ZipIterator{std::end(args)... }; }, containers);
     }
+};
+
+template <typename T, std::size_t I>
+concept ArrayType = requires(T param[I]) {
+    std::to_array<T, I>(param);
 };
 
 template <typename ... T>

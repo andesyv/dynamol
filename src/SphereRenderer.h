@@ -60,8 +60,8 @@ namespace dynamol
 											m_LOD1depthTexture{nullptr};
 		std::unique_ptr<globjects::Texture> m_depthStencilTexture = nullptr;
 		std::unique_ptr<globjects::Texture> m_spherePositionTexture{nullptr},
-									m_sphereLOD0PositionTexture{nullptr},
-									m_sphereLOD1PositionTexture{nullptr};
+									m_sphereLOD0PositionTexture{nullptr}, m_sphereLOD0PositionTextureNear{nullptr},
+									m_sphereLOD1PositionTexture{nullptr}, m_sphereLOD1PositionTextureNear{nullptr};
 		std::unique_ptr<globjects::Texture> m_sphereNormalTexture = nullptr;
 		std::unique_ptr<globjects::Texture> m_sphereLOD0NormalTexture{nullptr},
 											m_sphereLOD1NormalTexture{nullptr};
@@ -76,7 +76,10 @@ namespace dynamol
 		std::unique_ptr<globjects::Texture> m_shadowDepthTexture = nullptr;
 
 		std::unique_ptr<globjects::Framebuffer> m_sphereFramebuffer{nullptr},
-												m_sphereLOD0Framebuffer{nullptr}, m_sphereLOD1Framebuffer{nullptr};
+												m_sphereLOD0Framebuffer{globjects::Framebuffer::create()},
+												m_sphereLOD0FramebufferNear{globjects::Framebuffer::create()},
+												m_sphereLOD1Framebuffer{globjects::Framebuffer::create()},
+												m_sphereLOD1FramebufferNear{globjects::Framebuffer::create()};
 		std::unique_ptr<globjects::Framebuffer> m_sphereSplitFramebuffer{nullptr};
 		std::unique_ptr<globjects::Framebuffer> m_surfaceFramebuffer = nullptr;
 		std::unique_ptr<globjects::Framebuffer> m_ambientFramebuffer = nullptr;
