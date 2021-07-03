@@ -3,6 +3,7 @@
 uniform mat4 modelViewProjectionMatrix;
 uniform mat4 inverseModelViewProjectionMatrix;
 uniform float interpolation = 0.0;
+uniform uint bucketSize = 8u;
 
 in vec4 gFragmentPosition;
 flat in vec4 gSpherePosition;
@@ -14,7 +15,7 @@ flat in uint gSphereId;
 
 layout(binding = 0) uniform sampler2D positionTexture;
 layout(binding = 1) uniform sampler2D positionNearTexture;
-layout(r32ui, binding = 0) uniform uimage2D offsetImage;
+layout(r32ui, binding = 0) uniform uimage3D offsetImage;
 
 struct BufferEntry
 {
@@ -97,8 +98,20 @@ void main()
 	if (entry.near > position.w)
 		discard;
 
+	vec4 nearPosition = texelFetch(positionNearTexture,ivec2(gl_FragCoord.xy),0);
+	/**
+	f(x) = ax + b
+	f(x_0) = 0 = a * x_0 + b => a * x_0 = -b
+	f(x_1) = 8 = a * x_1 + b => a * x_1 = 8 - b
+	a * x_1 = 8 + (a * x_0) => a * (x_1 - x_0) = 8 => a = 8 / (x_1 - x_0)
+	a * x_0 = -b => 8 / (x_1 - x_0) * x_0 = -b => b = -(8 * x_0) / (x_1 - x_0)
+	f(x) = x * 8 / (x_1 - x_0) - (8 * x_0) / (x_1 - x_0)
+		 => (x * 8 - 8 * x_0) / (x_1 - x_0) => 8 * (x - x_0) / (x_1 - x_0) = f(x)
+	 */
+	uint bucketIndex = clamp(uint(float(bucketSize) * (entry.near - nearPosition.w) / (position.w - nearPosition.w)), 0u, bucketSize - 1u);
+
 	uint index = atomicCounterIncrement(count);
-	uint prev = imageAtomicExchange(offsetImage,ivec2(gl_FragCoord.xy),index);
+	uint prev = imageAtomicExchange(offsetImage,ivec3(ivec2(gl_FragCoord.xy), bucketIndex),index);
 
 	entry.far = length(sphere.far.xyz-near.xyz);
 

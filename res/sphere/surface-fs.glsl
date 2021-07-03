@@ -26,9 +26,10 @@ uniform float shininess;
 uniform vec2 focusPosition;
 
 uniform float interpolation = 0.0;
+uniform uint bucketSize = 8u;
 
-layout(binding = 0) uniform usampler2D offsetTexture;
-layout(binding = 1) uniform usampler2D offsetTexture2;
+layout(binding = 0) uniform usampler3D offsetTexture;
+layout(binding = 1) uniform usampler3D offsetTexture2;
 layout(binding = 2) uniform sampler2D positionTexture;
 layout(binding = 3) uniform sampler2D normalTexture;
 layout(binding = 4) uniform sampler2D positionTexture2;
@@ -159,8 +160,8 @@ void swap(inout uint a, inout uint b) {
 
 void main()
 {
-	uint offset = texelFetch(offsetTexture,ivec2(gl_FragCoord.xy),0).r;
-	uint offset2 = texelFetch(offsetTexture2,ivec2(gl_FragCoord.xy),0).r;
+	uint offset = texelFetch(offsetTexture,ivec3(ivec2(gl_FragCoord.xy), 0),0).r;
+	uint offset2 = texelFetch(offsetTexture2,ivec3(ivec2(gl_FragCoord.xy), 0),0).r;
 	// Note: Offset == 0 doesn't mean offset2 != 0
 	if (offset == 0 && offset2 == 0)
 		discard;
@@ -187,17 +188,29 @@ void main()
 	uint indices[maxEntries];
 	uint indices2[maxEntries];
 
-	// Traverse a-buffer and extract entries. (0 means empty)
-	while (offset > 0)
-	{
-		indices[entryCount++] = offset;
-		offset = intersections[offset].previous;
+	for (uint i = 0; i < bucketSize; ++i) {
+		if (i != 0) {
+			offset = texelFetch(offsetTexture,ivec3(ivec2(gl_FragCoord.xy), i),0).r;
+			offset2 = texelFetch(offsetTexture2,ivec3(ivec2(gl_FragCoord.xy), i),0).r;
+		}
+
+		// Traverse a-buffer and extract entries. (0 means empty)
+		while (offset > 0 && entryCount < maxEntries)
+		{
+			indices[entryCount++] = offset;
+			offset = intersections[offset].previous;
+		}
+		while (offset2 > 0 && entryCount2 < maxEntries)
+		{
+			indices2[entryCount2++] = offset2;
+			offset2 = intersections2[offset2].previous;
+		}
 	}
-	while (offset2 > 0)
-	{
-		indices2[entryCount2++] = offset2;
-		offset2 = intersections2[offset2].previous;
-	}
+
+#ifdef VISUALIZE_OVERLAPS
+	fragColor = vec4(vec3(entryCount) / 128.0, 1.0);
+	return;
+#endif
 
 	// Simplified algorithm if we only have a single list
 	const bool bFirstEmpty = entryCount == 0;

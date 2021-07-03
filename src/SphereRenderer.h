@@ -98,6 +98,7 @@ namespace dynamol
 
 		glm::ivec2 m_shadowMapSize = glm::ivec2(512, 512);
 		glm::ivec2 m_framebufferSize;
+		unsigned int m_offsetBucketSize = 8u;
 
 		std::unique_ptr<globjects::Buffer> m_sceneGraphBuffer, m_denseAtomVertices, m_hiarchyVertices,
 											m_sparseAtomVertices, m_triangleVertices;

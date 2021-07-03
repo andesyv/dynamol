@@ -389,12 +389,13 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 	m_colorTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
 	for (auto& tex : m_offsetTexture) {
-		tex = Texture::create(GL_TEXTURE_2D);
+		tex = Texture::create(GL_TEXTURE_3D);
 		tex->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		tex->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		tex->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		tex->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		tex->image2D(0, GL_R32UI, m_framebufferSize, 0, GL_RED_INTEGER, GL_UNSIGNED_BYTE, nullptr);
+		tex->setParameter(GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+		tex->image3D(0, GL_R32UI, glm::ivec3{m_framebufferSize, m_offsetBucketSize}, 0, GL_RED_INTEGER, GL_UNSIGNED_BYTE, nullptr);
 	}
 
 	m_shadowColorTexture = Texture::create(GL_TEXTURE_2D);
@@ -912,7 +913,7 @@ void SphereRenderer::display()
 		ImGui::EndMenu();
 	}
 
-	if (ImGui::BeginMenu("Other Shit")) {
+	if (ImGui::BeginMenu("Interpolation")) {
 		ImGui::SliderFloat("Interpolation", &interpolation, 0.f, 1.f);
 		ImGui::SliderFloat("Clustering", &clustering, 0.f, 1.f);
 		ImGui::SliderFloat("LOD0 radius", &rLOD0, 0.f, 10.f);
@@ -920,6 +921,18 @@ void SphereRenderer::display()
 		ImGui::SliderFloat("Interpolation sharpness", &sharpnessOffset, 0.1f, 32.0f);
 		ImGui::SliderInt("Start LOD", &startLODParam, 1, 4);
 		ImGui::Checkbox("Visualize overlaps", &bVisualizeOverlaps);
+		if (ImGui::SliderInt("Offset bucket size", reinterpret_cast<int*>(&m_offsetBucketSize), 1, 64)) {
+			// Resize buffers:
+			for (auto& tex : m_offsetTexture) {
+				tex = Texture::create(GL_TEXTURE_3D);
+				tex->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+				tex->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+				tex->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+				tex->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+				tex->setParameter(GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+				tex->image3D(0, GL_R32UI, glm::ivec3{m_framebufferSize, m_offsetBucketSize}, 0, GL_RED_INTEGER, GL_UNSIGNED_BYTE, nullptr);
+			}
+		}
 		ImGui::EndMenu();
 	}
 
@@ -1332,6 +1345,7 @@ void SphereRenderer::display()
 	programSpawn->setUniform("gridScale", gridSize);
 	programSpawn->setUniform("minb", bounds.first);
 	programSpawn->setUniform("maxb", bounds.second);
+	programSpawn->setUniform("bucketSize", m_offsetBucketSize);
 
 	for (auto [index, lod] : enumerate(getPairwiseLODs(interpolation))) {
 		if (lod == nullptr)
@@ -1431,6 +1445,7 @@ void SphereRenderer::display()
 	programSurface->setUniform("maxb", bounds.second);
 	const auto t = float(glfwGetTime());
 	programSurface->setUniform("time", t);
+	programSurface->setUniform("bucketSize", m_offsetBucketSize);
 
 	m_vaoQuad->bind();
 	programSurface->use();
