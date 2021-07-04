@@ -13,6 +13,7 @@
 #include <utility>
 #include <functional>
 #include "enumerate.h"
+#include <format>
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -981,6 +982,8 @@ void SphereRenderer::display()
 
 	if (bVisualizeOverlaps)
 		defines += "#define VISUALIZE_OVERLAPS\n";
+	
+	defines += std::format("#define BUCKET_SIZE {}\n", m_offsetBucketSize);
 
 	// Reload shaders if settings have changed
 	if (defines != m_shaderSourceDefines->string())

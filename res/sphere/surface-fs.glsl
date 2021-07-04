@@ -26,7 +26,6 @@ uniform float shininess;
 uniform vec2 focusPosition;
 
 uniform float interpolation = 0.0;
-uniform uint bucketSize = 8u;
 
 layout(binding = 0) uniform usampler3D offsetTexture;
 layout(binding = 1) uniform usampler3D offsetTexture2;
@@ -188,7 +187,13 @@ void main()
 	uint indices[maxEntries];
 	uint indices2[maxEntries];
 
-	for (uint i = 0; i < bucketSize; ++i) {
+	uint bucketContentSize[BUCKET_SIZE];
+	uint bucketContentSize2[BUCKET_SIZE];
+
+	for (uint i = 0; i < BUCKET_SIZE; ++i) {
+		bucketContentSize[i] = i == 0 ? 0 : bucketContentSize[i-1];
+		bucketContentSize2[i] = i == 0 ? 0 : bucketContentSize2[i-1];
+
 		if (i != 0) {
 			offset = texelFetch(offsetTexture,ivec3(ivec2(gl_FragCoord.xy), i),0).r;
 			offset2 = texelFetch(offsetTexture2,ivec3(ivec2(gl_FragCoord.xy), i),0).r;
@@ -199,16 +204,18 @@ void main()
 		{
 			indices[entryCount++] = offset;
 			offset = intersections[offset].previous;
+			bucketContentSize[i]++;
 		}
 		while (offset2 > 0 && entryCount2 < maxEntries)
 		{
 			indices2[entryCount2++] = offset2;
 			offset2 = intersections2[offset2].previous;
+			bucketContentSize2[i]++;
 		}
 	}
 
 #ifdef VISUALIZE_OVERLAPS
-	fragColor = vec4(vec3(entryCount) / 128.0, 1.0);
+	fragColor = vec4(vec3(bucketContentSize[0]) / 128.0, 1.0);
 	return;
 #endif
 
@@ -267,6 +274,9 @@ void main()
 	// End index is the index of the sphere after the intersecting spheres
 	uint endIndex = 0;
 	uint endIndex2 = 0;
+	
+	uint currentBucket = 0;
+	uint currentBucket2 = 0;
 
 	const uint maxEntryCount = max(entryCount, entryCount2);
 
@@ -297,8 +307,12 @@ void main()
 			if (currentIndex < entryCount - 1) {
 				uint minimumIndex = currentIndex;
 
-				// Find minimum index (based on near distance)
-				for(uint i = minimumIndex+1; i < entryCount; i++)
+				// Increment bucket index
+				while (bucketContentSize[currentBucket] <= currentIndex)
+					currentBucket++;
+
+				// Find minimum index in bucket (based on near distance)
+				for(uint i = minimumIndex+1; i < bucketContentSize[currentBucket]; i++)
 					if(intersections[indices[i]].near < intersections[indices[minimumIndex]].near)
 						minimumIndex = i;
 				
@@ -318,8 +332,12 @@ void main()
 			if (currentIndex < entryCount2 - 1) {
 				uint minimumIndex = currentIndex;
 
+				// Increment bucket index
+				while (bucketContentSize2[currentBucket2] <= currentIndex)
+					currentBucket2++;
+
 				// Find minimum index (based on near distance)
-				for(uint i = minimumIndex+1; i < entryCount2; i++)
+				for(uint i = minimumIndex+1; i < bucketContentSize2[currentBucket2]; i++)
 					if(intersections2[indices2[i]].near < intersections2[indices2[minimumIndex]].near)
 						minimumIndex = i;
 				
