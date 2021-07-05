@@ -289,20 +289,17 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 	m_depthStencilTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	m_depthStencilTexture->image2D(0, GL_DEPTH24_STENCIL8, m_framebufferSize, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
 
-	m_spherePositionTexture = Texture::create(GL_TEXTURE_2D);
-	m_spherePositionTexture->setParameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	m_spherePositionTexture->setParameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	m_spherePositionTexture->setParameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	m_spherePositionTexture->setParameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	m_spherePositionTexture->image2D(0, GL_RGBA32F, m_framebufferSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-
 	// Position textures:
+	m_spherePositionTexture = Texture::create(GL_TEXTURE_2D);
+	m_spherePositionTextureNear = Texture::create(GL_TEXTURE_2D);
 	m_sphereLOD0PositionTexture = Texture::create(GL_TEXTURE_2D);
 	m_sphereLOD0PositionTextureNear = Texture::create(GL_TEXTURE_2D);
 	m_sphereLOD1PositionTexture = Texture::create(GL_TEXTURE_2D);
 	m_sphereLOD1PositionTextureNear = Texture::create(GL_TEXTURE_2D);
 
 	for (auto tex : {
+		m_spherePositionTexture.get(),
+		m_spherePositionTextureNear.get(),
 		m_sphereLOD0PositionTexture.get(),
 		m_sphereLOD0PositionTextureNear.get(),
 		m_sphereLOD1PositionTexture.get(),
@@ -459,8 +456,9 @@ SphereRenderer::SphereRenderer(Viewer* viewer) : Renderer(viewer), gridSize{2}, 
 	m_sphereFramebuffer = Framebuffer::create();
 	m_sphereFramebuffer->attachTexture(GL_COLOR_ATTACHMENT0, m_spherePositionTexture.get());
 	m_sphereFramebuffer->attachTexture(GL_COLOR_ATTACHMENT1, m_sphereNormalTexture.get());
+	m_sphereFramebuffer->attachTexture(GL_COLOR_ATTACHMENT2, m_spherePositionTextureNear.get());
 	m_sphereFramebuffer->attachTexture(GL_DEPTH_ATTACHMENT, m_depthTexture.get());
-	m_sphereFramebuffer->setDrawBuffers({ GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 });
+	m_sphereFramebuffer->setDrawBuffers({ GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 });
 
 	for (auto [fb, sphereTex, normalTex, depthTex] : zip(
 		std::to_array({m_sphereLOD0Framebuffer.get(), m_sphereLOD1Framebuffer.get(), m_sphereLOD0FramebufferNear.get(), m_sphereLOD1FramebufferNear.get()}),
@@ -691,6 +689,20 @@ void SphereRenderer::display()
 	auto programLayerSphere = shaderProgram("sphere");
 	auto programFramebufferSplitting = shaderProgram("fb-split");
 	auto programFramebufferSplittingBlitting = shaderProgram("fb-split-blit");
+
+	// Shader compilation test:
+	// for (const auto& name : {
+	// 	"sphere",
+	// 	"spawn",
+	// 	"surface",
+	// 	"fb-split",
+	// 	"fb-split-blit"
+	// }) {
+	// 	auto shader = shaderProgram(name);
+	// 	shader->link();
+	// 	assert(shader->isValid());
+		
+	// }
 
 	
 	// get cursor position for magic lens
@@ -1193,13 +1205,11 @@ void SphereRenderer::display()
 	};
 
 	for (auto [index, lod] : enumerate(cat(getPairwiseLODs(interpolation), getPairwiseLODs(interpolation)))) {
-		auto framebuffer = getFramebuffer(index);
-		framebuffer->bind();
-
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		
 		if (lod == nullptr)
 			continue;
+		auto framebuffer = getFramebuffer(index);
+		framebuffer->bind();
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		auto& [vao, vCount, scale, cluster, sharp] = *lod;
 		const auto interp = clampedInterpolation(interpolation);
 		const auto weight = index % 2 == 0 ? 1.f - interp : interp;
@@ -1223,41 +1233,45 @@ void SphereRenderer::display()
 	//////////////////////////////////////////////////////////////////////////
 	// Framebuffer splitting:
 	//////////////////////////////////////////////////////////////////////////
-	// glMemoryBarrier(GL_ALL_BARRIER_BITS);
+	glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
-	// const bool bSingleLOD = isSinglePair(interpolation);
-	// m_sphereSplitFramebuffer->bind();
-	// glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	// glDepthFunc(GL_ALWAYS);
+	const bool bSingleLOD = isSinglePair(interpolation);
+	m_sphereFramebuffer->bind();
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glDepthFunc(GL_ALWAYS);
 
-	// const auto programSplitting = bSingleLOD ? programFramebufferSplittingBlitting : programFramebufferSplitting;
+	const auto programSplitting = bSingleLOD ? programFramebufferSplittingBlitting : programFramebufferSplitting;
 
-	// programSplitting->use();
+	programSplitting->use();
 
-	// m_sphereLOD0PositionTexture->bindActive(0);
-	// m_sphereLOD0NormalTexture->bindActive(1);
+	m_sphereLOD0PositionTexture->bindActive(0);
+	m_sphereLOD0NormalTexture->bindActive(1);
+	m_sphereLOD0PositionTextureNear->bindActive(2);
 	
-	// if (!bSingleLOD) {
-	// 	programSplitting->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
-	// 	programSplitting->setUniform("interpolation", clampedInterpolation(interpolation));
+	if (!bSingleLOD) {
+		programSplitting->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
+		programSplitting->setUniform("interpolation", clampedInterpolation(interpolation));
 
-	// 	m_sphereLOD1PositionTexture->bindActive(2);
-	// 	m_sphereLOD1NormalTexture->bindActive(3);
-	// }
+		m_sphereLOD1PositionTexture->bindActive(3);
+		m_sphereLOD1NormalTexture->bindActive(4);
+		m_sphereLOD1PositionTextureNear->bindActive(5);
+	}
 
-	// m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
+	m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
 
-	// if (!bSingleLOD) {
-	// 	m_sphereLOD1NormalTexture->unbindActive(3);
-	// 	m_sphereLOD1PositionTexture->unbindActive(2);
-	// }
+	if (!bSingleLOD) {
+		m_sphereLOD1PositionTextureNear->unbindActive(5);
+		m_sphereLOD1NormalTexture->unbindActive(4);
+		m_sphereLOD1PositionTexture->unbindActive(3);
+	}
 
-	// m_sphereLOD0NormalTexture->unbindActive(1);
-	// m_sphereLOD0PositionTexture->unbindActive(0);
+	m_sphereLOD0PositionTextureNear->unbindActive(2);
+	m_sphereLOD0NormalTexture->unbindActive(1);
+	m_sphereLOD0PositionTexture->unbindActive(0);
 		
-	// programSplitting->release();
+	programSplitting->release();
 
-	// m_sphereSplitFramebuffer->unbind();
+	m_sphereFramebuffer->unbind();
 
 	// //////////////////////////////////////////////////////////////////////////
 	// // Layer sphere rendering pass (for back position texture)
@@ -1333,7 +1347,17 @@ void SphereRenderer::display()
 
 	// Positions of fragments of spheres (only closest to camera)
 	// m_spherePositionTexture->bindActive(0);
+
+	m_intersectionCount[0]->clearSubData(GL_R32UI, 0, sizeof(uint), GL_RED_INTEGER, GL_UNSIGNED_INT, &intersectionClearValue);
+	m_offsetTexture[0]->clearImage(0, GL_RED_INTEGER, GL_UNSIGNED_INT, &offsetClearValue);
+
+	m_spherePositionTexture->bindActive(0);
+	m_spherePositionTextureNear->bindActive(1);
+	m_intersectionBuffer[0]->bindBase(GL_SHADER_STORAGE_BUFFER, 1);
+	m_intersectionCount[0]->bindBase(GL_ATOMIC_COUNTER_BUFFER, 1);
+	m_offsetTexture[0]->bindImageTexture(0, 0, false, 0, GL_READ_WRITE, GL_R32UI);
 	
+
 	programSpawn->use();
 	
 	programSpawn->setUniform("modelViewMatrix", modelViewMatrix);
@@ -1357,17 +1381,7 @@ void SphereRenderer::display()
 		const auto interp = clampedInterpolation(interpolation);
 		const auto weight = index == 0 ? 1.f - interp : interp;
 
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	
-		m_intersectionCount[index]->clearSubData(GL_R32UI, 0, sizeof(uint), GL_RED_INTEGER, GL_UNSIGNED_INT, &intersectionClearValue);
-		m_offsetTexture[index]->clearImage(0, GL_RED_INTEGER, GL_UNSIGNED_INT, &offsetClearValue);
-
-		(index == 0 ? m_sphereLOD0PositionTexture : m_sphereLOD1PositionTexture)->bindActive(0);
-		(index == 0 ? m_sphereLOD0PositionTextureNear : m_sphereLOD1PositionTextureNear)->bindActive(1);
-		m_intersectionBuffer[index]->bindBase(GL_SHADER_STORAGE_BUFFER, 1);
-		m_intersectionCount[index]->bindBase(GL_ATOMIC_COUNTER_BUFFER, 1);
-		m_offsetTexture[index]->bindImageTexture(0, 0, false, 0, GL_READ_WRITE, GL_R32UI);
-
+		glClear(GL_DEPTH_BUFFER_BIT);
 
 		programSpawn->setUniform("radiusScale", radiusScale * scale); // Outer radius
 		programSpawn->setUniform("outerRadius", scale);
@@ -1379,17 +1393,15 @@ void SphereRenderer::display()
 
 
 		vao->drawArrays(GL_POINTS, 0, vCount);
-
-		m_intersectionCount[index]->unbind(GL_ATOMIC_COUNTER_BUFFER);
-		m_intersectionBuffer[index]->unbind(GL_SHADER_STORAGE_BUFFER);
-		m_offsetTexture[index]->unbindImageTexture(0);
-		(index == 0 ? m_sphereLOD0PositionTextureNear : m_sphereLOD1PositionTextureNear)->unbindActive(1);
-		(index == 0 ? m_sphereLOD0PositionTexture : m_sphereLOD1PositionTexture)->unbindActive(0);
 	}
-	
+
+	m_spherePositionTextureNear->unbindActive(1);
+	m_spherePositionTexture->unbindActive(0);
+	m_offsetTexture[0]->unbindImageTexture(0);
+	m_intersectionCount[0]->unbind(GL_ATOMIC_COUNTER_BUFFER);
+	m_intersectionBuffer[0]->unbind(GL_SHADER_STORAGE_BUFFER);
+		
 	programSpawn->release();
-	
-	// m_spherePositionTexture->unbindActive(0);
 
 	glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
@@ -1420,10 +1432,10 @@ void SphereRenderer::display()
 	m_intersectionCount[0]->bindBase(GL_ATOMIC_COUNTER_BUFFER, 1);
 	m_intersectionCount[1]->bindBase(GL_ATOMIC_COUNTER_BUFFER, 2);
 	// m_statisticsBuffer->bindBase(GL_SHADER_STORAGE_BUFFER, 2);
-	m_sphereLOD0PositionTexture->bindActive(2);
-	m_sphereLOD0NormalTexture->bindActive(3);
-	m_sphereLOD1PositionTexture->bindActive(4);
-	m_sphereLOD1NormalTexture->bindActive(5);
+	m_spherePositionTexture->bindActive(2);
+	m_sphereNormalTexture->bindActive(3);
+	// m_sphereLOD1PositionTexture->bindActive(4);
+	// m_sphereLOD1NormalTexture->bindActive(5);
 
 	programSurface->setUniform("modelViewMatrix", modelViewMatrix);
 	programSurface->setUniform("projectionMatrix", projectionMatrix);
@@ -1448,7 +1460,6 @@ void SphereRenderer::display()
 	programSurface->setUniform("maxb", bounds.second);
 	const auto t = float(glfwGetTime());
 	programSurface->setUniform("time", t);
-	programSurface->setUniform("bucketSize", m_offsetBucketSize);
 
 	m_vaoQuad->bind();
 	programSurface->use();
@@ -1461,10 +1472,13 @@ void SphereRenderer::display()
 	m_intersectionCount[1]->unbind(GL_ATOMIC_COUNTER_BUFFER);
 	m_intersectionCount[0]->unbind(GL_ATOMIC_COUNTER_BUFFER);
 
-	m_sphereLOD1NormalTexture->unbindActive(5);
-	m_sphereLOD1PositionTexture->unbindActive(4);
-	m_sphereLOD0NormalTexture->unbindActive(3);
-	m_sphereLOD0PositionTexture->unbindActive(2);
+	m_sphereNormalTexture->unbindActive(3);
+	m_spherePositionTexture->unbindActive(2);
+
+	// m_sphereLOD1NormalTexture->unbindActive(5);
+	// m_sphereLOD1PositionTexture->unbindActive(4);
+	// m_sphereLOD0NormalTexture->unbindActive(3);
+	// m_sphereLOD0PositionTexture->unbindActive(2);
 	m_offsetTexture[1]->unbindActive(1);
 	m_offsetTexture[0]->unbindActive(0);;
 
@@ -1574,19 +1588,16 @@ void SphereRenderer::display()
 	// // // glPatchParameteri(GL_PATCH_VERTICES, 1);
 	// programTest->use();
 
-	// m_sphereLOD1PositionTexture->bindActive(0);
-	// // m_offsetTexture->bindActive(1);
+	// m_spherePositionTexture->bindActive(0);
+	// m_spherePositionTextureNear->bindActive(1);
+
 	// programTest->setUniform("modelViewProjectionMatrix", modelViewProjectionMatrix);
 	// programTest->setUniform("interpolation", interpolation);
-	// // glPointSize(10.f);
 	// m_vaoQuad->drawArrays(GL_POINTS, 0, 1);
 	// programTest->release();
 
-	// // m_offsetTexture->unbindActive(1);
-	// m_sphereMiddlePositionTexture->unbindActive(0);
-	// m_sphereLOD0PositionTexture->unbindActive(0);
-
-	// m_shadeFramebuffer->unbind();
+	// m_spherePositionTextureNear->unbindActive(1);
+	// m_spherePositionTexture->unbindActive(0);
 
 	if (viewportSize == viewer()->viewportSize())
 	{

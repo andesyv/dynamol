@@ -8,7 +8,7 @@ uniform float interpolation = 0.0;
 layout(pixel_center_integer) in vec4 gl_FragCoord;
 
 layout(binding = 0) uniform sampler2D positionTex;
-// layout(binding = 1) uniform usampler2D offsetTexture;
+layout(binding = 1) uniform sampler2D positionNearTex;
 
 // https://stackoverflow.com/questions/9246100/how-can-i-implement-the-distance-from-a-point-to-a-line-segment-in-glsl
 float DistToLine(vec2 pt1, vec2 pt2, vec2 testPt)
@@ -40,11 +40,6 @@ float LinearizeDepth(float depth)
 out vec4 fragColor;
 
 void main() {
-	// uint index = texelFetch(offsetTexture,ivec2(gl_FragCoord.xy),0).r;
-	// const vec2 uv = (gFragmentPosition.xy / gFragmentPosition.w) * 0.5 + 0.5;
-	// fragColor = vec4(vec3(index), 1.);
-
     vec4 position = texelFetch(positionTex,ivec2(gl_FragCoord.xy),0);
-    fragColor = vec4(vec3(position.w / 100.0), 1.0);
-    // fragColor = vec4(position.rgb / 1000.0, 1.0);
+    fragColor = vec4(vec3(1.0 - position.w / 50.0), 1.0);
 }

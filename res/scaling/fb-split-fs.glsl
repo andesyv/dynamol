@@ -7,15 +7,18 @@ layout(pixel_center_integer) in vec4 gl_FragCoord;
 
 layout(binding = 0) uniform sampler2D LOD0Position;
 layout(binding = 1) uniform sampler2D LOD0Normal;
+layout(binding = 2) uniform sampler2D LOD0PositionNear;
 
-layout(binding = 2) uniform sampler2D LOD1Position;
-layout(binding = 3) uniform sampler2D LOD1Normal;
+layout(binding = 3) uniform sampler2D LOD1Position;
+layout(binding = 4) uniform sampler2D LOD1Normal;
+layout(binding = 5) uniform sampler2D LOD1PositionNear;
 
 uniform mat4 modelViewProjectionMatrix;
 uniform float interpolation = 0.0;
 
 layout(location = 0) out vec4 middlePosition;
 layout(location = 1) out vec4 middleNormal;
+layout(location = 2) out vec4 middlePositionNear;
 
 float calcDepth(vec3 pos)
 {
@@ -42,7 +45,26 @@ void main() {
     } else {
         // middlePosition = mix(lod0, lod1, interpolation);
         // middleNormal = mix(lod0n, lod1n, interpolation);
+        /// Choose spheres furthest away
         middlePosition = lod0.w > lod1.w ? lod0 : lod1;
         middleNormal = lod0.w > lod1.w ? lod0n : lod1n;
+        // middlePosition = lod1;
+        // middleNormal = lod1n;
+    }
+
+
+
+
+    vec4 lod0near = texelFetch(LOD0PositionNear,ivec2(gl_FragCoord.xy),0);
+    vec4 lod1near = texelFetch(LOD1PositionNear,ivec2(gl_FragCoord.xy),0);
+
+    if (END_PLANE <= lod0near.w)
+        middlePositionNear = lod1near;
+    else if (END_PLANE <= lod1near.w)
+        middlePositionNear = lod0near;
+    else {
+        // middlePositionNear = mix(lod0near, lod1near, interpolation);
+        /// Choose sphere closest
+        middlePositionNear = lod0near.w < lod1near.w ? lod0near : lod1near;
     }
 }

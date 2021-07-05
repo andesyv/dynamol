@@ -31,8 +31,8 @@ layout(binding = 0) uniform usampler3D offsetTexture;
 layout(binding = 1) uniform usampler3D offsetTexture2;
 layout(binding = 2) uniform sampler2D positionTexture;
 layout(binding = 3) uniform sampler2D normalTexture;
-layout(binding = 4) uniform sampler2D positionTexture2;
-layout(binding = 5) uniform sampler2D normalTexture2;
+// layout(binding = 4) uniform sampler2D positionTexture2;
+// layout(binding = 5) uniform sampler2D normalTexture2;
 
 uniform uint gridScale = 1;
 uniform uint gridDepth = 1;
@@ -160,15 +160,14 @@ void swap(inout uint a, inout uint b) {
 void main()
 {
 	uint offset = texelFetch(offsetTexture,ivec3(ivec2(gl_FragCoord.xy), 0),0).r;
-	uint offset2 = texelFetch(offsetTexture2,ivec3(ivec2(gl_FragCoord.xy), 0),0).r;
 	// Note: Offset == 0 doesn't mean offset2 != 0
-	if (offset == 0 && offset2 == 0)
+	if (offset == 0)
 		discard;
 
 	vec4 position = texelFetch(positionTexture,ivec2(gl_FragCoord.xy),0);
 	vec4 normal = texelFetch(normalTexture,ivec2(gl_FragCoord.xy),0);
-	vec4 position2 = texelFetch(positionTexture2,ivec2(gl_FragCoord.xy),0);
-	vec4 normal2 = texelFetch(normalTexture2,ivec2(gl_FragCoord.xy),0);
+	// vec4 position2 = texelFetch(positionTexture2,ivec2(gl_FragCoord.xy),0);
+	// vec4 normal2 = texelFetch(normalTexture2,ivec2(gl_FragCoord.xy),0);
 
 	vec4 fragCoord = gFragmentPosition;
 	fragCoord /= fragCoord.w;
@@ -192,11 +191,9 @@ void main()
 
 	for (uint i = 0; i < BUCKET_SIZE; ++i) {
 		bucketContentSize[i] = i == 0 ? 0 : bucketContentSize[i-1];
-		bucketContentSize2[i] = i == 0 ? 0 : bucketContentSize2[i-1];
 
 		if (i != 0) {
 			offset = texelFetch(offsetTexture,ivec3(ivec2(gl_FragCoord.xy), i),0).r;
-			offset2 = texelFetch(offsetTexture2,ivec3(ivec2(gl_FragCoord.xy), i),0).r;
 		}
 
 		// Traverse a-buffer and extract entries. (0 means empty)
@@ -205,12 +202,6 @@ void main()
 			indices[entryCount++] = offset;
 			offset = intersections[offset].previous;
 			bucketContentSize[i]++;
-		}
-		while (offset2 > 0 && entryCount2 < maxEntries)
-		{
-			indices2[entryCount2++] = offset2;
-			offset2 = intersections2[offset2].previous;
-			bucketContentSize2[i]++;
 		}
 	}
 
@@ -238,28 +229,9 @@ void main()
 	 * position is inner radius and entryCount is outer radius.
 	 * Likewise: position == END_PLANE when entryCount == 0
 	 */
-	vec4 closestPosition;
-	vec3 closestNormal;
+	vec4 closestPosition = position;
+	vec3 closestNormal = normal.xyz;
 	// If second LOD is empty, use first
-	if (entryCount2 == 0 || position2.w >= END_PLANE) {
-		closestPosition = position;
-		closestNormal = normal.xyz;
-	// If first LOD is empty, use second
-	} else if (entryCount == 0 || position.w >= END_PLANE) {
-		closestPosition = position2;
-		closestNormal = normal2.xyz;
-	// If none are empty, choose closest:
-	} else {
-		// if (position.w > position2.w) {
-		// 	closestPosition = position;
-		// 	closestNormal = normal.xyz;
-		// } else {
-		// 	closestPosition = position2;
-		// 	closestNormal = normal2.xyz;
-		// }
-		closestPosition = mix(position, position2, interpolation);
-		closestNormal = mix(normal, normal2, interpolation).xyz;
-	}
 
 	float sharpnessFactor = 1.0;
 	vec3 ambientColor = ambientMaterial;
@@ -300,62 +272,33 @@ void main()
 
 	// Loop for +1 past the end such that endIndex can extend to 1 past the end of the list.
 	// (Since our intersecting list is in range [start, end-1])
-	for (uint currentIndex = 0; currentIndex <= maxEntryCount; ++currentIndex) {
-		if (!bFirstEmpty && currentIndex <= entryCount) {
-			// Incremental sort (first list)
-			/// Don't need to sort on the last index because it will be sorted by that point
-			if (currentIndex < entryCount - 1) {
-				uint minimumIndex = currentIndex;
+	for (uint currentIndex = 0; currentIndex <= entryCount; ++currentIndex) {
+		// Incremental sort (first list)
+		/// Don't need to sort on the last index because it will be sorted by that point
+		if (currentIndex < entryCount - 1) {
+			uint minimumIndex = currentIndex;
 
-				// Increment bucket index
-				while (bucketContentSize[currentBucket] <= currentIndex)
-					currentBucket++;
+			// Increment bucket index
+			while (bucketContentSize[currentBucket] <= currentIndex)
+				currentBucket++;
 
-				// Find minimum index in bucket (based on near distance)
-				for(uint i = minimumIndex+1; i < bucketContentSize[currentBucket]; i++)
-					if(intersections[indices[i]].near < intersections[indices[minimumIndex]].near)
-						minimumIndex = i;
-				
-				// Selection sort swap:
-				if (minimumIndex != currentIndex)
-					swap(indices[minimumIndex], indices[currentIndex]);
-			}
-
-			// Increment endIndex (first list)
-			// && endIndex+1 - startIndex < maximumIntersections
-			while (endIndex < currentIndex && intersections[indices[endIndex]].near <= intersections[indices[startIndex]].far)
-				++endIndex;
+			// Find minimum index in bucket (based on near distance)
+			for(uint i = minimumIndex+1; i < bucketContentSize[currentBucket]; i++)
+				if(intersections[indices[i]].near < intersections[indices[minimumIndex]].near)
+					minimumIndex = i;
+			
+			// Selection sort swap:
+			if (minimumIndex != currentIndex)
+				swap(indices[minimumIndex], indices[currentIndex]);
 		}
 
-		if (!bSecondEmpty && currentIndex <= entryCount2) {
-			// Incremental sort (second list)
-			if (currentIndex < entryCount2 - 1) {
-				uint minimumIndex = currentIndex;
-
-				// Increment bucket index
-				while (bucketContentSize2[currentBucket2] <= currentIndex)
-					currentBucket2++;
-
-				// Find minimum index (based on near distance)
-				for(uint i = minimumIndex+1; i < bucketContentSize2[currentBucket2]; i++)
-					if(intersections2[indices2[i]].near < intersections2[indices2[minimumIndex]].near)
-						minimumIndex = i;
-				
-				// Selection sort swap:
-				if (minimumIndex != currentIndex)
-					swap(indices2[minimumIndex], indices2[currentIndex]);
-			}
-
-			// Increment endIndex (second list)
-			while (endIndex2 < currentIndex && intersections2[indices2[endIndex2]].near <= intersections2[indices2[startIndex2]].far)
-				++endIndex2;
-		}
+		// Increment endIndex (first list)
+		// && endIndex+1 - startIndex < maximumIntersections
+		while (endIndex < currentIndex && intersections[indices[endIndex]].near <= intersections[indices[startIndex]].far)
+			++endIndex;
 
 		// If we've yet to find a set of intersecting spheres, keep looping
-		if (
-			(!bFirstEmpty && endIndex < entryCount && intersections[indices[endIndex]].near <= intersections[indices[startIndex]].far) ||
-			(!bSecondEmpty && endIndex2 < entryCount2 && intersections2[indices2[endIndex2]].near <= intersections2[indices2[startIndex2]].far)
-		)
+		if (endIndex < entryCount && intersections[indices[endIndex]].near <= intersections[indices[startIndex]].far)
 			continue;
 
 		// Note: At this point both ranges of sphere lists should either have reached an end of the span of overlap,
@@ -365,13 +308,8 @@ void main()
 		// A: We (for some reason) check the inner range of the intersecting spheres [start+1, end-1]
 		uint ii = indices[startIndex];
 		uint ii2 = indices2[startIndex2];
-		// Note: Near as min when only one list is in effect gives wrong result because one of them is 0
-		float nearDistance = bSecondEmpty ? intersections[ii].near : bFirstEmpty ? intersections2[ii2].near
-							: min(intersections[ii].near, intersections2[ii2].near);
-		float farDistance = bSecondEmpty ? intersections[indices[endIndex-1]].far : bFirstEmpty ? intersections2[indices2[endIndex2-1]].far
-							: max(intersections[indices[endIndex-1]].far, intersections2[indices2[endIndex2-1]].far);
-		// float nearDistance = intersections2[ii2].near;
-		// float farDistance = intersections2[indices2[endIndex2-1]].far;
+		float nearDistance = intersections[ii].near;
+		float farDistance = intersections[indices[endIndex-1]].far;
 
 		float maximumDistance = (farDistance-nearDistance);
 		float surfaceDistance = 1.0;
@@ -402,51 +340,25 @@ void main()
 			vec3 sumColor = vec3(0.0);
 			
 			// sum contributions of atoms in the neighborhood (for first surface)
-			if (!bFirstEmpty) {
-				for (uint j = startIndex; j < endIndex; j++)
-				{
-					uint ij = indices[j];
-					uint id = intersections[ij].id;
-					uint elementId = bitfieldExtract(id,0,8);
+			for (uint j = startIndex; j < endIndex; j++)
+			{
+				uint ij = indices[j];
+				uint id = intersections[ij].id;
+				uint elementId = bitfieldExtract(id,0,8);
 
-					vec3 aj = intersections[ij].center;
-					float rj = intersections[ij].radius; // elements[elementId].radius;
-					float weight = intersections[ij].weight;
-					// float sphereSharpness = intersections[ij].sharpness;
+				vec3 aj = intersections[ij].center;
+				float rj = intersections[ij].radius; // elements[elementId].radius;
+				float weight = intersections[ij].weight;
+				// float sphereSharpness = intersections[ij].sharpness;
 
-					vec3 atomOffset = currentPosition.xyz-aj;
-					float atomDistanceSquared = dot(atomOffset, atomOffset)/(rj*rj);
+				vec3 atomOffset = currentPosition.xyz-aj;
+				float atomDistanceSquared = dot(atomOffset, atomOffset)/(rj*rj);
 
-					float atomValue = exp(-s*atomDistanceSquared) * weight;
-					vec3 atomNormal = atomValue*normalize(atomOffset);
-					
-					sumValue += atomValue;
-					sumNormal += atomNormal;
-				}
-			}
-			
-			// sum contributions of atoms in the neighborhood (for second surface)
-			if (!bSecondEmpty) {
-				for (uint j = startIndex2; j < endIndex2; j++)
-				{
-					uint ij = indices2[j];
-					uint id = intersections2[ij].id;
-					uint elementId = bitfieldExtract(id,0,8);
-
-					vec3 aj = intersections2[ij].center;
-					float rj = intersections2[ij].radius; // elements[elementId].radius;
-					float weight = intersections2[ij].weight;
-					// float sphereSharpness = intersections[ij].sharpness;
-
-					vec3 atomOffset = currentPosition.xyz-aj;
-					float atomDistanceSquared = dot(atomOffset, atomOffset)/(rj*rj);
-
-					float atomValue = exp(-s*atomDistanceSquared) * weight;
-					vec3 atomNormal = atomValue*normalize(atomOffset);
-					
-					sumValue += atomValue;
-					sumNormal += atomNormal;
-				}
+				float atomValue = exp(-s*atomDistanceSquared) * weight;
+				vec3 atomNormal = atomValue*normalize(atomOffset);
+				
+				sumValue += atomValue;
+				sumNormal += atomNormal;
 			}
 			
 			/** -1 because were searching for the distance to the surface when p(x) = 1.0
@@ -493,17 +405,7 @@ void main()
 			closestNormal = candidateNormal;
 		}
 
-		// If lists aren't empty, increment closest
-		if (!bFirstEmpty && !bSecondEmpty) {
-			if (intersections[ii].near < intersections2[ii2].near)
-				++startIndex;
-			else
-				++startIndex2;
-		// Otherwise increment both (only one of them is actually used)
-		} else {
-			++startIndex;
-			++startIndex2;
-		}
+		++startIndex;
 	}
 
 	if (closestPosition.w >= 65535.0)

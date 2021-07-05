@@ -59,7 +59,7 @@ namespace dynamol
 		std::unique_ptr<globjects::Texture> m_LOD0depthTexture{nullptr},
 											m_LOD1depthTexture{nullptr};
 		std::unique_ptr<globjects::Texture> m_depthStencilTexture = nullptr;
-		std::unique_ptr<globjects::Texture> m_spherePositionTexture{nullptr},
+		std::unique_ptr<globjects::Texture> m_spherePositionTexture{nullptr}, m_spherePositionTextureNear{nullptr},
 									m_sphereLOD0PositionTexture{nullptr}, m_sphereLOD0PositionTextureNear{nullptr},
 									m_sphereLOD1PositionTexture{nullptr}, m_sphereLOD1PositionTextureNear{nullptr};
 		std::unique_ptr<globjects::Texture> m_sphereNormalTexture = nullptr;
@@ -98,7 +98,7 @@ namespace dynamol
 
 		glm::ivec2 m_shadowMapSize = glm::ivec2(512, 512);
 		glm::ivec2 m_framebufferSize;
-		unsigned int m_offsetBucketSize = 8u;
+		unsigned int m_offsetBucketSize = 64u;
 
 		std::unique_ptr<globjects::Buffer> m_sceneGraphBuffer, m_denseAtomVertices, m_hiarchyVertices,
 											m_sparseAtomVertices, m_triangleVertices;
